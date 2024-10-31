@@ -116,6 +116,8 @@ mod test {
     }
 
     // TODO: Write tests for all instructions
+
+
     // TODO: Write tests for memory
     #[test]
     fn test_lda_from_memory() {
