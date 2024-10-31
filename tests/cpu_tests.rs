@@ -37,23 +37,45 @@ mod test {
     }
 
     #[test]
-    fn test_0xe8_inx_simple() {
+    fn test_increase() {
         let mut cpu = CPU::new();
         cpu.x.set(19);
-        cpu.interpret(vec![0xe8, 0x00]);
+        cpu.y.set(29);
+        cpu.interpret(vec![0xc8, 0xe8, 0x00]);
 
         assert_eq!(cpu.x.value(), 20);
-        assert!(!cpu.status.is_set(Status::Zero));
+        assert_eq!(cpu.y.value(), 30);
+    }
+
+    #[test]
+    fn test_increase_wrap_zero() {
+        let mut cpu = CPU::new();
+        cpu.y.set(0xfe);
+        cpu.interpret(vec![0xc8, 0xc8, 0x00]);
+
+        assert_eq!(cpu.y.value(), 0);
+        assert!(cpu.status.is_set(Status::Zero));
         assert!(!cpu.status.is_set(Status::Negative));
     }
 
     #[test]
-    fn test_0xe8_inx_wrap_zero() {
+    fn test_decrease() {
         let mut cpu = CPU::new();
-        cpu.x.set(0xfe);
-        cpu.interpret(vec![0xe8, 0xe8, 0x00]);
+        cpu.x.set(21);
+        cpu.y.set(31);
+        cpu.interpret(vec![0xca, 0x88, 0x00]);
 
-        assert_eq!(cpu.x.value(), 0);
+        assert_eq!(cpu.x.value(), 20);
+        assert_eq!(cpu.y.value(), 30);
+    }
+
+    #[test]
+    fn test_decrease_wrap_zero() {
+        let mut cpu = CPU::new();
+        cpu.y.set(2);
+        cpu.interpret(vec![0x88, 0x88, 0x00]);
+
+        assert_eq!(cpu.y.value(), 0);
         assert!(cpu.status.is_set(Status::Zero));
         assert!(!cpu.status.is_set(Status::Negative));
     }
@@ -73,5 +95,16 @@ mod test {
         assert!(!cpu.status.is_set(Status::Overflow));
     }
 
+    #[test]
+    fn test_set_functions() {
+        let mut cpu = CPU::new();
+        cpu.interpret(vec![0x38, 0xf8, 0x78, 0x00]);
+
+        assert!(cpu.status.is_set(Status::Carry));
+        assert!(cpu.status.is_set(Status::Decimal));
+        assert!(cpu.status.is_set(Status::InterruptDisable));
+    }
+
     // TODO: Write tests for all instructions
+    // TODO: Write tests for memory
 }

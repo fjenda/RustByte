@@ -23,6 +23,11 @@ impl Register {
         self.value = self.value.wrapping_add(val);
     }
 
+    /// Subtracts val from the value of the register
+    pub fn subtract(&mut self, val: u8) {
+        self.value = self.value.wrapping_sub(val);
+    }
+
     /// Getter for the value
     pub fn value(&self) -> u8 {
         self.value

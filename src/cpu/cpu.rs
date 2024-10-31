@@ -1,17 +1,25 @@
 // https://www.nesdev.org/obelisk-6502-guide/reference.html
+
+use crate::cpu::register::Register;
+use crate::cpu::cpu_status::{CPUStatus, Status};
+use crate::cpu::memory::Memory;
+
+/// This class represents the CPU
 pub struct CPU {
-    // 3x 8-bit registers A (accumulator), X, Y (indexes)
+    /// 3x 8-bit registers A (accumulator), X, Y (indexes)
     pub a: Register,
     pub x: Register,
     pub y: Register,
 
-
+    /// CPU Status with Flags
     pub status: CPUStatus,
-    pub prog_counter: u16,
-}
 
-use crate::cpu::register::Register;
-use crate::cpu::cpu_status::{CPUStatus, Status};
+    /// This is also a register, but it's simpler to represent it using u16
+    pub prog_counter: u16,
+
+    /// CPU Memory
+    pub memory: Memory,
+}
 
 impl CPU {
     /// Creates an instance of CPU
@@ -21,7 +29,8 @@ impl CPU {
             x: Register::new(),
             y: Register::new(),
             status: CPUStatus::new(),
-            prog_counter: 0
+            prog_counter: 0,
+            memory: Memory::new(),
         }
     }
 
@@ -138,11 +147,13 @@ impl CPU {
     }
 
     fn dex(&mut self) {
-        todo!()
+        self.x.subtract(1);
+        self.zero_negative(self.x.value());
     }
 
     fn dey(&mut self) {
-        todo!()
+        self.y.subtract(1);
+        self.zero_negative(self.y.value())
     }
 
     fn eor(&mut self) {
@@ -188,9 +199,9 @@ impl CPU {
         todo!()
     }
 
-    fn nop(&mut self) {
-        todo!()
-    }
+    // fn nop(&mut self) {
+    //     return;
+    // }
 
     fn ora(&mut self) {
         todo!()
@@ -233,15 +244,15 @@ impl CPU {
     }
 
     fn sec(&mut self) {
-        todo!()
+        self.status.add(Status::Carry);
     }
 
     fn sed(&mut self) {
-        todo!()
+        self.status.add(Status::Decimal);
     }
 
     fn sei(&mut self) {
-        todo!()
+        self.status.add(Status::InterruptDisable);
     }
 
     fn sta(&mut self) {
@@ -383,12 +394,10 @@ impl CPU {
                 },
                 // DEX
                 0xCA => {
-                    // TODO
                     self.dex();
                 },
                 // DEY
                 0x88 => {
-                    // TODO
                     self.dey();
                 },
                 // EOR
@@ -439,8 +448,8 @@ impl CPU {
                 },
                 // NOP
                 0xEA => {
-                    // TODO
-                    self.nop();
+                    // self.nop();
+                    // no change
                 },
                 // ORA
                 0x09 | 0x05 | 0x15 | 0x0D | 0x1D | 0x19 | 0x01 | 0x11 => {
@@ -494,17 +503,14 @@ impl CPU {
                 },
                 // SEC
                 0x38 => {
-                    // TODO
                     self.sec();
                 },
                 // SED
                 0xF8 => {
-                    // TODO
                     self.sed();
                 },
                 // SEI
                 0x78 => {
-                    // TODO
                     self.sei();
                 },
                 // STA
