@@ -1,7 +1,9 @@
 // https://www.nesdev.org/obelisk-6502-guide/reference.html
 
+use crate::cpu::addressing::Addressing;
 use crate::cpu::register::Register;
 use crate::cpu::cpu_status::{CPUStatus, Status};
+use crate::cpu::instructions::{Instruction, INSTRUCTION_MAP};
 use crate::cpu::memory::Memory;
 
 /// This class represents the CPU
@@ -34,39 +36,150 @@ impl CPU {
         }
     }
 
+    /// Function that loads the Program ROM into memory and resets the CPU
+    pub fn load_program(&mut self, program: Vec<u8>) -> Result<(), &'static str> {
+        // load new program into the memory
+        self.memory.load(program)?;
+
+        // reset the cpu
+        self.reset();
+
+        // start of the Program ROM
+        self.prog_counter = 0x8000;
+
+        Ok(())
+    }
+
+    /// Function that loads the Program ROM into the memory and runs the program
+    // pub fn run_program(&mut self, program: Vec<u8>) -> Result<(), &'static str> {
+    //     // load new program into the memory
+    //     self.memory.load(program)?;
+    //
+    //     // reset the cpu
+    //     // self.reset();
+    //
+    //     // start of the Program ROM
+    //     self.prog_counter = 0x8000;
+    //
+    //     // interpret the program
+    //     self.interpret();
+    //
+    //     Ok(())
+    // }
+
+    /// Function that resets the CPU
+    pub fn reset(&mut self) {
+        // reset the registers
+        self.a.reset();
+        self.x.reset();
+        self.y.reset();
+
+        // reset the status
+        self.status.reset();
+
+        // set prog_counter to address at 0xFFFC
+        self.prog_counter = self.memory.read_u16(0xFFFC);
+    }
+
     /// Function that handles the logic of setting Zero and Negative flags
     fn zero_negative(&mut self, res: u8) {
-        // match res {
-        //     // if result was 0 set Zero Flag
-        //     0 => self.status.add(Status::Zero),
-        //     _ => self.status.remove(Status::Zero),
-        // }
-
         // Zero Flag
-        if res == 0 {
-            self.status.add(Status::Zero);
-        } else {
-            self.status.remove(Status::Zero);
+        match res {
+            0 => self.status.add(Status::Zero),
+            _ => self.status.remove(Status::Zero),
         }
 
         // Negative Flag
-        if res & 0b1000_0000 != 0 {
-            self.status.add(Status::Negative);
-        } else {
-            self.status.remove(Status::Negative);
+        match res & Status::Negative.as_u8() {
+            0 => self.status.remove(Status::Negative),
+            _ => self.status.add(Status::Negative),
         }
-
-        // match res & Status::Negative.as_u8() {
-        //     0 => self.status.add(Status::Negative),
-        //     _ => self.status.remove(Status::Negative),
-        // }
     }
 
-    fn adc(&mut self) {
+    // https://www.nesdev.org/obelisk-6502-guide/addressing.html
+    /// Function that gets the parameter address for a function using its addressing mode
+    fn get_param_address(&mut self, mode: &Addressing) -> u16 {
+        match mode {
+            // Immediate
+            Addressing::Immediate => self.prog_counter,
+
+            // Zero Page
+            Addressing::ZeroPage => self.memory.read(self.prog_counter) as u16,
+            Addressing::ZeroPageX => {
+                // u8 value from memory
+                let val = self.memory.read(self.prog_counter);
+
+                // add register x value to it (wrap around if needed)
+                let param = val.wrapping_add(self.x.value()) as u16;
+                param
+            },
+            Addressing::ZeroPageY => {
+                // u8 value from memory
+                let val = self.memory.read(self.prog_counter);
+
+                // add register y value to it (wrap around if needed)
+                let param = val.wrapping_add(self.y.value()) as u16;
+                param
+            },
+
+            // Absolute
+            Addressing::Absolute => self.memory.read_u16(self.prog_counter),
+            Addressing::AbsoluteX => {
+                // u16 value from memory
+                let val = self.memory.read_u16(self.prog_counter);
+
+                // add register x value to it (wrap around if needed)
+                let param = val.wrapping_add(self.x.value() as u16);
+                param
+            },
+            Addressing::AbsoluteY => {
+                // u16 value from memory
+                let val = self.memory.read_u16(self.prog_counter);
+
+                // add register y value to it (wrap around if needed)
+                let param = val.wrapping_add(self.y.value() as u16);
+                param
+            },
+
+            // Indirect
+            Addressing::IndirectX => {
+                // u8 value from memory
+                let val = self.memory.read(self.prog_counter);
+
+                // index into the memory
+                let index: u8 = val.wrapping_add(self.x.value());
+
+                // high and low
+                let low = self.memory.read(index as u16);
+                let high = self.memory.read(index.wrapping_add(1) as u16);
+                u16::from_le_bytes([low, high])
+            },
+            Addressing::IndirectY => {
+                // u8 value from memory
+                let val = self.memory.read(self.prog_counter);
+
+                // high and low
+                let low = self.memory.read(val as u16);
+                let high = self.memory.read(val.wrapping_add(1) as u16);
+
+                // param
+                let tmp = u16::from_le_bytes([low, high]);
+                let param = tmp.wrapping_add(self.y.value() as u16);
+                param
+            },
+
+            // None
+            Addressing::None => {
+                panic!("mode {:?} not supported", mode);
+            }
+        }
+    }
+
+    fn adc(&mut self, mode: &Addressing) {
         todo!()
     }
 
-    fn and(&mut self) {
+    fn and(&mut self, mode: &Addressing) {
         todo!()
     }
 
@@ -182,7 +295,12 @@ impl CPU {
         todo!()
     }
 
-    fn lda(&mut self, param: u8) {
+    fn lda(&mut self, mode: &Addressing) {
+        // get param from memory
+        let address = self.get_param_address(mode);
+        let param = self.memory.read(address);
+
+        // set param
         self.a.set(param);
         self.zero_negative(self.a.value());
     }
@@ -293,24 +411,26 @@ impl CPU {
         todo!()
     }
 
-    /// Function that interprets the given program
-    pub fn interpret(&mut self, program: Vec<u8>) {
-        self.prog_counter = 0;
 
+
+    /// Function that interprets the given program
+    pub fn interpret(&mut self) {
         loop {
-            let opcode = program[self.prog_counter as usize];
+            let ins_code = self.memory.read(self.prog_counter);
             self.prog_counter += 1;
 
-            match opcode {
+            let ins: &Instruction = INSTRUCTION_MAP.get(&ins_code).expect("Code not recognized");
+
+            match ins_code {
                 // ADC
                 0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
                     // TODO
-                    self.adc();
+                    self.adc(&ins.mode);
                 },
                 // AND
                 0x29 | 0x25 | 0x35 | 0x2D | 0x3D | 0x39 | 0x21 | 0x31 => {
                     // TODO
-                    self.and();
+                    self.and(&ins.mode);
                 },
                 // ASL
                 0x0A | 0x06 | 0x16 | 0x0E | 0x1E => {
@@ -393,13 +513,9 @@ impl CPU {
                     self.dec()
                 },
                 // DEX
-                0xCA => {
-                    self.dex();
-                },
+                0xCA => self.dex(),
                 // DEY
-                0x88 => {
-                    self.dey();
-                },
+                0x88 => self.dey(),
                 // EOR
                 0x49 | 0x45 | 0x55 | 0x4D | 0x5D | 0x59 | 0x41 | 0x51 => {
                     // TODO
@@ -426,10 +542,7 @@ impl CPU {
                 },
                 // LDA
                 0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => {
-                    // TODO
-                    let param = program[self.prog_counter as usize];
-                    self.prog_counter += 1;
-                    self.lda(param);
+                    self.lda(&ins.mode);
                 },
                 // LDX
                 0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => {
@@ -552,8 +665,12 @@ impl CPU {
                     // TODO
                     self.tya();
                 }
-                _ => todo!()
+                _ => panic!("Unknown code {:?}!", ins_code),
             }
+
+            // increase prog_counter
+            self.prog_counter += (ins.bytes - 1) as u16;
+
         }
     }
 }

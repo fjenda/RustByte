@@ -32,4 +32,9 @@ impl Register {
     pub fn value(&self) -> u8 {
         self.value
     }
+
+    /// Function that resets the register to 0
+    pub fn reset(&mut self) {
+        self.value = 0;
+    }
 }

@@ -44,4 +44,9 @@ impl CPUStatus {
     pub fn is_set(&self, status: Status) -> bool {
         self.value & status.as_u8() != 0
     }
+
+    /// Function that resets the status to 0
+    pub fn reset(&mut self) {
+        self.value = 0;
+    }
 }

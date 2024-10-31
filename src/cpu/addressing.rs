@@ -3,9 +3,11 @@
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
 pub enum Addressing {
+    None,
     Immediate,
     ZeroPage,
     ZeroPageX,
+    ZeroPageY,
     Absolute,
     AbsoluteX,
     AbsoluteY,
