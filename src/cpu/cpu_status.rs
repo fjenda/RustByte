@@ -1,4 +1,4 @@
-// https://www.nesdev.org/obelisk-6502-guide/registers.html
+// https://www.nesdev.org/wiki/Status_flags
 
 /// Actual Flags and their values
 #[derive(Debug, Clone, Copy)]
@@ -26,7 +26,7 @@ pub struct CPUStatus {
 impl CPUStatus {
     pub fn new() -> Self {
         CPUStatus {
-            value: 0
+            value: 0b0010_0000,
         }
     }
 
@@ -48,5 +48,9 @@ impl CPUStatus {
     /// Function that resets the status to 0
     pub fn reset(&mut self) {
         self.value = 0;
+    }
+
+    pub fn set_bits(&mut self, bits: u8) {
+        self.value = bits;
     }
 }

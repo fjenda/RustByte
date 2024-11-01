@@ -3,8 +3,9 @@
 use crate::cpu::addressing::Addressing;
 use crate::cpu::register::Register;
 use crate::cpu::cpu_status::{CPUStatus, Status};
-use crate::cpu::instructions::{Instruction, INSTRUCTION_MAP};
+use crate::cpu::instructions::{Instruction, INSTRUCTION_MAP, OpName::*};
 use crate::cpu::memory::Memory;
+use crate::cpu::cpu_stack::CPUStack;
 
 /// This class represents the CPU
 pub struct CPU {
@@ -21,6 +22,10 @@ pub struct CPU {
 
     /// CPU Memory
     pub memory: Memory,
+
+    // TODO: Stack Pointer
+    // 0x0100 - 0x01FF
+    pub stack: CPUStack
 }
 
 impl CPU {
@@ -33,6 +38,7 @@ impl CPU {
             status: CPUStatus::new(),
             prog_counter: 0,
             memory: Memory::new(),
+            stack: CPUStack::new(),
         }
     }
 
@@ -45,27 +51,11 @@ impl CPU {
         self.reset();
 
         // start of the Program ROM
+        // (actually it can be anything from 0x8000 to 0xFFFF)
         self.prog_counter = 0x8000;
 
         Ok(())
     }
-
-    /// Function that loads the Program ROM into the memory and runs the program
-    // pub fn run_program(&mut self, program: Vec<u8>) -> Result<(), &'static str> {
-    //     // load new program into the memory
-    //     self.memory.load(program)?;
-    //
-    //     // reset the cpu
-    //     // self.reset();
-    //
-    //     // start of the Program ROM
-    //     self.prog_counter = 0x8000;
-    //
-    //     // interpret the program
-    //     self.interpret();
-    //
-    //     Ok(())
-    // }
 
     /// Function that resets the CPU
     pub fn reset(&mut self) {
@@ -76,6 +66,9 @@ impl CPU {
 
         // reset the status
         self.status.reset();
+
+        // reset the stack
+        self.stack.reset();
 
         // set prog_counter to address at 0xFFFC
         self.prog_counter = self.memory.read_u16(0xFFFC);
@@ -98,6 +91,7 @@ impl CPU {
 
     // https://www.nesdev.org/obelisk-6502-guide/addressing.html
     /// Function that gets the parameter address for a function using its addressing mode
+    /// TODO: page wrapping
     fn get_param_address(&mut self, mode: &Addressing) -> u16 {
         match mode {
             // Immediate
@@ -162,7 +156,6 @@ impl CPU {
                 let low = self.memory.read(val as u16);
                 let high = self.memory.read(val.wrapping_add(1) as u16);
 
-                // param
                 let tmp = u16::from_le_bytes([low, high]);
                 let addr = tmp.wrapping_add(self.y.value() as u16);
                 addr
@@ -176,7 +169,26 @@ impl CPU {
     }
 
     fn adc(&mut self, mode: &Addressing) {
-        todo!()
+        let address = self.get_param_address(mode);
+        let param = self.memory.read(address);
+
+        let old_status = self.status.is_set(Status::Carry);
+        let res = self.a.value().wrapping_add(param).wrapping_add(old_status as u8);
+
+        // set carry flag
+        match res < self.a.value() {
+            true => self.status.add(Status::Carry),
+            false => self.status.remove(Status::Carry),
+        }
+
+        // set overflow flag
+        match (self.a.value() ^ res) & (param ^ res) & 0x80 {
+            0 => self.status.remove(Status::Overflow),
+            _ => self.status.add(Status::Overflow),
+        }
+
+        self.a.set(res);
+        self.zero_negative(res);
     }
 
     fn and(&mut self, mode: &Addressing) {
@@ -234,8 +246,24 @@ impl CPU {
         self.status.add(status);
     }
 
-    fn bit(&mut self) {
-        todo!()
+    fn bit(&mut self, mode: &Addressing) {
+        let address = self.get_param_address(mode);
+        let param = self.memory.read(address);
+
+        match self.a.value() & param {
+            0 => self.status.add(Status::Zero),
+            _ => self.status.remove(Status::Zero),
+        }
+
+        match param & Status::Negative.as_u8() {
+            0 => self.status.remove(Status::Negative),
+            _ => self.status.add(Status::Negative),
+        }
+
+        match param & Status::Overflow.as_u8() {
+            0 => self.status.remove(Status::Overflow),
+            _ => self.status.add(Status::Overflow),
+        }
     }
 
     fn compare(&mut self, reg_val: u8, mode: &Addressing) {
@@ -301,7 +329,9 @@ impl CPU {
     }
 
     fn jsr(&mut self) {
-        todo!()
+        let address = self.memory.read_u16(self.prog_counter);
+        self.stack.push_u16(self.prog_counter + 2 - 1);
+        self.prog_counter = address;
     }
 
     fn lda(&mut self, mode: &Addressing) {
@@ -374,19 +404,20 @@ impl CPU {
     }
 
     fn pha(&mut self) {
-        todo!()
+        self.stack.push(self.a.value());
     }
 
     fn php(&mut self) {
-        todo!()
+        self.stack.push(self.status.value.clone());
     }
 
     fn pla(&mut self) {
-        todo!()
+        self.a.set(self.stack.pop());
+        self.zero_negative(self.a.value());
     }
 
     fn plp(&mut self) {
-        todo!()
+        self.status.set_bits(self.stack.pop());
     }
 
     fn rol_a(&mut self) {
@@ -463,15 +494,36 @@ impl CPU {
     }
 
     fn rti(&mut self) {
-        todo!()
+        self.status.set_bits(self.stack.pop());
+        self.prog_counter = self.stack.pop_u16();
+
     }
 
     fn rts(&mut self) {
-        todo!()
+        self.prog_counter = self.stack.pop_u16();
     }
 
     fn sbc(&mut self, mode: &Addressing) {
-        todo!()
+        let address = self.get_param_address(mode);
+        let param = self.memory.read(address);
+
+        let old_status = self.status.is_set(Status::Carry);
+        let res = self.a.value().wrapping_sub(param).wrapping_sub(old_status as u8);
+
+        // set carry flag
+        match self.a.value() >= param {
+            true => self.status.add(Status::Carry),
+            false => self.status.remove(Status::Carry),
+        }
+
+        // set overflow flag
+        match (self.a.value() ^ res) & (param ^ res) & 0x80 {
+            0 => self.status.remove(Status::Overflow),
+            _ => self.status.add(Status::Overflow),
+        }
+
+        self.a.set(res);
+        self.zero_negative(res);
     }
 
     fn sec(&mut self) {
@@ -512,7 +564,8 @@ impl CPU {
     }
 
     fn tsx(&mut self) {
-        todo!()
+        self.x.set(self.stack.peek());
+        self.zero_negative(self.x.value());
     }
 
     fn txa(&mut self, mode: &Addressing) {
@@ -521,7 +574,7 @@ impl CPU {
     }
 
     fn txs(&mut self) {
-        todo!()
+        self.stack.push(self.x.value());
     }
 
     fn tya(&mut self) {
@@ -539,164 +592,75 @@ impl CPU {
 
             let ins: &Instruction = INSTRUCTION_MAP.get(&ins_code).expect("Code not recognized");
 
-            match ins_code {
-                // ADC
-                0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => self.adc(&ins.mode),
-                // AND
-                0x29 | 0x25 | 0x35 | 0x2D | 0x3D | 0x39 | 0x21 | 0x31 => self.and(&ins.mode),
-                // ASL (accumulator)
-                0x0A => self.asl_a(),
-                // ASL
-                0x06 | 0x16 | 0x0E | 0x1E => self.asl(&ins.mode),
-                // BIT
-                0x24 | 0x2C => {
-                    // TODO
-                    self.bit();
-                },
-                // BCS
-                0xB0 => self.branch(self.status.is_set(Status::Carry)),
-                // BCC
-                0x90 => self.branch(!self.status.is_set(Status::Carry)),
-                // BEQ
-                0xF0 => self.branch(self.status.is_set(Status::Zero)),
-                // BNE
-                0xD0 => self.branch(!self.status.is_set(Status::Zero)),
-                // BMI
-                0x30 => self.branch(self.status.is_set(Status::Negative)),
-                // BPL
-                0x10 => self.branch(!self.status.is_set(Status::Negative)),
-                // BVS
-                0x70 => self.branch(self.status.is_set(Status::Overflow)),
-                // BVC
-                0x50 => self.branch(!self.status.is_set(Status::Overflow)),
-                // BRK
-                0x00 => return,
-                // CLC
-                0x18 => self.clear_status(Status::Carry),
-                // CLD
-                0xD8 => self.clear_status(Status::Decimal),
-                // CLI
-                0x58 => self.clear_status(Status::InterruptDisable),
-                // CLV
-                0xb8 => self.clear_status(Status::Overflow),
-                // CMP
-                0xC9 | 0xC5 | 0xD5 | 0xCD | 0xDD | 0xD9 | 0xC1 | 0xD1 => self.compare(self.a.value(), &ins.mode),
-                // CPX
-                0xE0 | 0xE4 | 0xEC => self.compare(self.x.value(), &ins.mode),
-                // CPY
-                0xC0 | 0xC4 | 0xCC => self.compare(self.y.value(), &ins.mode),
-                // DEC
-                0xC6 | 0xD6 | 0xCE | 0xDE => self.dec(&ins.mode),
-                // DEX
-                0xCA => self.dex(),
-                // DEY
-                0x88 => self.dey(),
-                // EOR
-                0x49 | 0x45 | 0x55 | 0x4D | 0x5D | 0x59 | 0x41 | 0x51 => self.eor(&ins.mode),
-                // INC
-                0xE6 | 0xF6 | 0xEE | 0xFF => self.inc(&ins.mode),
-                // INX
-                0xE8 => self.inx(),
-                // INY
-                0xC8 => self.iny(),
-                // JMP
-                0x4C | 0x6C => self.jmp(&ins.mode),
-                // JSR
-                0x20 => {
-                    // TODO
-                    self.jsr();
-                },
-                // LDA
-                0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => self.lda(&ins.mode),
-                // LDX
-                0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => self.ldx(&ins.mode),
-                // LDY
-                0xA0 | 0xA4 | 0xB4 | 0xAC | 0xBC => self.ldy(&ins.mode),
-                // LSR (accumulator)
-                0x4A => self.lsr_a(),
-                // LSR
-                0x46 | 0x56 | 0x4E | 0x5E => self.lsr(&ins.mode),
-                // NOP
-                0xEA => /* no change */ (),
-                // ORA
-                0x09 | 0x05 | 0x15 | 0x0D | 0x1D | 0x19 | 0x01 | 0x11 => self.ora(&ins.mode),
-                // PHA
-                0x48 => {
-                    // TODO
-                    self.pha();
-                },
-                // PHP
-                0x08 => {
-                  // TODO
-                    self.php();
-                },
-                // PLA
-                0x68 => {
-                    // TODO
-                    self.pla();
-                },
-                // PLP
-                0x28 => {
-                    // TODO
-                    self.plp();
-                },
-                // ROL (accumulator)
-                0x2A => self.rol_a(),
-                // ROL
-                0x26 | 0x36 | 0x2E | 0x3E => self.rol(&ins.mode),
-                // ROR (accumulator)
-                0x6A => self.ror_a(),
-                // ROR
-                0x66 | 0x76 | 0x6E | 0x7E => self.ror(&ins.mode),
-                // RTI
-                0x40 => {
-                    // TODO
-                    self.rti();
-                },
-                // RTS
-                0x60 => {
-                    // TODO
-                    self.rts();
-                },
-                // SBC
-                0xE9 | 0xE5 | 0xF5 | 0xED | 0xFD | 0xF9 | 0xE1 | 0xF1 => {
+            match ins.name {
+                // TODO
+                ADC => self.adc(&ins.mode),
+                AND => self.and(&ins.mode),
+                ASL_A => self.asl_a(),
+                ASL => self.asl(&ins.mode),
+                BIT => self.bit(&ins.mode),
+                BCS => self.branch(self.status.is_set(Status::Carry)),
+                BCC => self.branch(!self.status.is_set(Status::Carry)),
+                BEQ => self.branch(self.status.is_set(Status::Zero)),
+                BNE => self.branch(!self.status.is_set(Status::Zero)),
+                BMI => self.branch(self.status.is_set(Status::Negative)),
+                BPL => self.branch(!self.status.is_set(Status::Negative)),
+                BVS => self.branch(self.status.is_set(Status::Overflow)),
+                BVC => self.branch(!self.status.is_set(Status::Overflow)),
+                BRK => return,
+                CLC => self.clear_status(Status::Carry),
+                CLD => self.clear_status(Status::Decimal),
+                CLI => self.clear_status(Status::InterruptDisable),
+                CLV => self.clear_status(Status::Overflow),
+                CMP => self.compare(self.a.value(), &ins.mode),
+                CPX => self.compare(self.x.value(), &ins.mode),
+                CPY => self.compare(self.y.value(), &ins.mode),
+                DEC => self.dec(&ins.mode),
+                DEX => self.dex(),
+                DEY => self.dey(),
+                EOR => self.eor(&ins.mode),
+                INC => self.inc(&ins.mode),
+                INX => self.inx(),
+                INY => self.iny(),
+                JMP => self.jmp(&ins.mode),
+                JSR => self.jsr(),
+                LDA => self.lda(&ins.mode),
+                LDX => self.ldx(&ins.mode),
+                LDY => self.ldy(&ins.mode),
+                LSR_A => self.lsr_a(),
+                LSR => self.lsr(&ins.mode),
+                NOP => /* no change */ (),
+                ORA => self.ora(&ins.mode),
+                PHA => self.pha(),
+                PHP => self.php(),
+                PLA => self.pla(),
+                PLP => self.plp(),
+                ROL_A => self.rol_a(),
+                ROL => self.rol(&ins.mode),
+                ROR_A => self.ror_a(),
+                ROR => self.ror(&ins.mode),
+                RTI => self.rti(),
+                RTS => self.rts(),
+                SBC => {
                     // TODO
                     self.sbc(&ins.mode)
                 },
-                // SEC
-                0x38 => self.set_status(Status::Carry),
-                // SED
-                0xF8 => self.set_status(Status::Decimal),
-                // SEI
-                0x78 => self.set_status(Status::InterruptDisable),
-                // STA
-                0x85 | 0x95 | 0x8D | 0x9D | 0x99 | 0x81 | 0x91 => self.sta(&ins.mode),
-                // STX
-                0x86 | 0x96 | 0x8E => self.stx(&ins.mode),
-                // STY
-                0x84 | 0x94 | 0x8C => self.sty(&ins.mode),
-                // TAX
-                0xAA => self.tax(),
-                // TAY
-                0xA8 => self.tay(),
-                // TSX
-                0xBA => {
-                    // TODO
-                    self.tsx();
-                },
-                // TXA
-                0x8A => self.txa(&ins.mode),
-                // TXS
-                0x9A => {
-                    // TODO
-                    self.txs();
-                },
-                // TYA
-                0x98 => self.tya(),
-                _ => panic!("Unknown code {:?}!", ins_code),
+                SEC => self.set_status(Status::Carry),
+                SED => self.set_status(Status::Decimal),
+                SEI => self.set_status(Status::InterruptDisable),
+                STA => self.sta(&ins.mode),
+                STX => self.stx(&ins.mode),
+                STY => self.sty(&ins.mode),
+                TAX => self.tax(),
+                TAY => self.tay(),
+                TSX => self.tsx(),
+                TXA => self.txa(&ins.mode),
+                TXS => self.txs(),
+                TYA => self.tya(),
             }
 
             // increase prog_counter
+            // (ins.bytes - 1) because we already increased it by 1 at the beginning
             self.prog_counter += (ins.bytes - 1) as u16;
 
         }
