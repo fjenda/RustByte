@@ -2,7 +2,7 @@
 // https://www.nesdev.org/obelisk-6502-guide/addressing.html
 
 
-/// Addressing modes for the 6502 CPU
+/// Addressing modes for the CPU
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
 pub enum Addressing {

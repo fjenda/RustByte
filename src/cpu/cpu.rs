@@ -2,6 +2,7 @@
 
 use crate::cpu::addressing::Addressing;
 use crate::cpu::bus::Bus;
+use crate::cpu::cartridge::Cartridge;
 use crate::cpu::register::Register;
 use crate::cpu::cpu_status::{CPUStatus, Status};
 use crate::cpu::instructions::{Instruction, INSTRUCTION_MAP, OpName::*};
@@ -33,7 +34,7 @@ pub struct CPU {
 
 impl CPU {
     /// Creates an instance of CPU
-    pub fn new() -> Self {
+    pub fn new(bus: Bus) -> Self {
         CPU {
             a: Register::new(),
             x: Register::new(),
@@ -41,7 +42,7 @@ impl CPU {
             status: CPUStatus::new(),
             prog_counter: 0,
             memory: Memory::new(),
-            bus: Bus::new(),
+            bus,
             stack: CPUStack::new(),
         }
     }
@@ -579,18 +580,6 @@ impl CPU {
         self.zero_negative(res);
     }
 
-    fn sec(&mut self) {
-        self.status.add(Status::Carry);
-    }
-
-    fn sed(&mut self) {
-        self.status.add(Status::Decimal);
-    }
-
-    fn sei(&mut self) {
-        self.status.add(Status::InterruptDisable);
-    }
-
     fn sta(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
         self.write(address, self.a.value());
@@ -621,7 +610,7 @@ impl CPU {
         self.zero_negative(self.x.value());
     }
 
-    fn txa(&mut self, mode: &Addressing) {
+    fn txa(&mut self) {
         self.a.set(self.x.value());
         self.zero_negative(self.a.value());
     }
@@ -802,7 +791,7 @@ impl CPU {
                 TAX => self.tax(),
                 TAY => self.tay(),
                 TSX => self.tsx(),
-                TXA => self.txa(&ins.mode),
+                TXA => self.txa(),
                 TXS => self.txs(),
                 TYA => self.tya(),
             }

@@ -3,7 +3,9 @@ use sdl2::event::Event;
 use sdl2::EventPump;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::{Color, PixelFormatEnum};
+use rust_byte::cpu::bus::Bus;
 use rust_byte::cpu::cpu::CPU;
+use rust_byte::cpu::cartridge::Cartridge;
 
 fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
     for event in event_pump.poll_iter() {
@@ -100,9 +102,14 @@ fn main() {
         0x91, 0x00, 0x60, 0xa6, 0x03, 0xa9, 0x00, 0x81, 0x10, 0xa2, 0x00, 0xa9, 0x01, 0x81, 0x10,
         0x60, 0xa6, 0xff, 0xea, 0xea, 0xca, 0xd0, 0xfb, 0x60,
     ];
-    //load the game
-    let mut cpu = CPU::new();
-    cpu.load_program(game_code);
+
+    // load the game from nes file
+    let snake_nes = include_bytes!("../assets/nestest.nes").to_vec();
+    let cartridge = Cartridge::new(snake_nes).expect("Failed to load NES file");
+    let bus = Bus::new(cartridge);
+    let mut cpu = CPU::new(bus);
+
+    // cpu.load_program(game_code);
     cpu.reset();
 
     let mut screen_state = [0 as u8; 32 * 3 * 32];
