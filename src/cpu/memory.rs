@@ -33,10 +33,12 @@ impl Memory {
         }
 
         // set data
-        self.data[start as usize .. (start as usize + prog.len())].copy_from_slice(&prog);
+        // self.data[start as usize .. (start as usize + prog.len())].copy_from_slice(&prog);
+        self.data[0x0600 .. (0x0600 + prog.len())].copy_from_slice(&prog);
 
         // set the 0xFFFC address
-        self.write_u16(0xFFFC, start);
+        // self.write_u16(0xFFFC, start);
+        self.write_u16(0xFFFC, 0x0600);
 
         Ok(())
     }

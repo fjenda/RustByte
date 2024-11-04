@@ -1,5 +1,9 @@
 // https://www.nesdev.org/obelisk-6502-guide/reference.html
 
+use sdl2::event::Event;
+use sdl2::EventPump;
+use sdl2::keyboard::Keycode;
+use sdl2::pixels::Color;
 use crate::cpu::addressing::Addressing;
 use crate::cpu::register::Register;
 use crate::cpu::cpu_status::{CPUStatus, Status};
@@ -48,11 +52,12 @@ impl CPU {
         self.memory.load(program)?;
 
         // reset the cpu
-        self.reset();
+        // self.reset();
 
         // start of the Program ROM
         // (actually it can be anything from 0x8000 to 0xFFFF)
-        self.prog_counter = 0x8000;
+        // self.prog_counter = 0x8000;
+        // self.prog_counter = 0xC000;
 
         Ok(())
     }
@@ -323,9 +328,38 @@ impl CPU {
         self.zero_negative(self.y.value());
     }
 
-    fn jmp(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+    fn jmp_abs(&mut self) {
+        let address = self.memory.read_u16(self.prog_counter);
         self.prog_counter = address;
+    }
+
+    // An original 6502 has does not correctly fetch the target address if the indirect vector falls on a page boundary
+    // (e.g. $xxFF where xx is any value from $00 to $FF).
+    // In this case fetches the LSB from $xxFF as expected but takes the MSB from $xx00.
+    // This is fixed in some later chips like the 65SC02 so for compatibility always ensure the indirect vector is not at the end of the page.
+    fn jmp_ind(&mut self) {
+        let address = self.memory.read_u16(self.prog_counter);
+
+        let indirect_ref = if CPU::is_page_boundary(address) {
+            self.read_indirect_address(address)
+        } else {
+            self.memory.read_u16(address)
+        };
+
+        self.prog_counter = indirect_ref;
+    }
+
+
+    // helper function for indirect jump
+    fn is_page_boundary(address: u16) -> bool {
+        address & 0x00FF == 0x00FF
+    }
+
+    // helper function for indirect jump
+    fn read_indirect_address(&self, mem_address: u16) -> u16 {
+        let lo = self.memory.read(mem_address);
+        let hi = self.memory.read(mem_address & 0xFF00);
+        u16::from_le_bytes([lo, hi])
     }
 
     fn jsr(&mut self) {
@@ -500,7 +534,7 @@ impl CPU {
     }
 
     fn rts(&mut self) {
-        self.prog_counter = self.stack.pop_u16();
+        self.prog_counter = self.stack.pop_u16() + 1;
     }
 
     fn sbc(&mut self, mode: &Addressing) {
@@ -508,15 +542,15 @@ impl CPU {
         let param = self.memory.read(address);
 
         let old_status = self.status.is_set(Status::Carry);
-        let res = self.a.value().wrapping_sub(param).wrapping_sub(old_status as u8);
+        let res = self.a.value().wrapping_sub(param).wrapping_sub(!old_status as u8);
 
-        // set carry flag
-        match self.a.value() >= param {
+        // Set carry flag (no borrow occurred)
+        match self.a.value() >= param + (!old_status as u8) {
             true => self.status.add(Status::Carry),
             false => self.status.remove(Status::Carry),
         }
 
-        // set overflow flag
+        // Set overflow flag
         match (self.a.value() ^ res) & (param ^ res) & 0x80 {
             0 => self.status.remove(Status::Overflow),
             _ => self.status.add(Status::Overflow),
@@ -586,14 +620,111 @@ impl CPU {
 
     /// Function that interprets the given program
     pub fn interpret(&mut self) {
+        self.interpret_callback(|_| {});
+        // loop {
+        //     let ins_code = self.memory.read(self.prog_counter);
+        //     self.prog_counter += 1;
+        //
+        //     let ins: &Instruction = INSTRUCTION_MAP.get(&ins_code).expect("Code not recognized");
+        //
+        //     match ins.name {
+        //         // TODO
+        //         ADC => self.adc(&ins.mode),
+        //         AND => self.and(&ins.mode),
+        //         ASL_A => self.asl_a(),
+        //         ASL => self.asl(&ins.mode),
+        //         BIT => self.bit(&ins.mode),
+        //         BCS => self.branch(self.status.is_set(Status::Carry)),
+        //         BCC => self.branch(!self.status.is_set(Status::Carry)),
+        //         BEQ => self.branch(self.status.is_set(Status::Zero)),
+        //         BNE => self.branch(!self.status.is_set(Status::Zero)),
+        //         BMI => self.branch(self.status.is_set(Status::Negative)),
+        //         BPL => self.branch(!self.status.is_set(Status::Negative)),
+        //         BVS => self.branch(self.status.is_set(Status::Overflow)),
+        //         BVC => self.branch(!self.status.is_set(Status::Overflow)),
+        //         BRK => return,
+        //         CLC => self.clear_status(Status::Carry),
+        //         CLD => self.clear_status(Status::Decimal),
+        //         CLI => self.clear_status(Status::InterruptDisable),
+        //         CLV => self.clear_status(Status::Overflow),
+        //         CMP => self.compare(self.a.value(), &ins.mode),
+        //         CPX => self.compare(self.x.value(), &ins.mode),
+        //         CPY => self.compare(self.y.value(), &ins.mode),
+        //         DEC => self.dec(&ins.mode),
+        //         DEX => self.dex(),
+        //         DEY => self.dey(),
+        //         EOR => self.eor(&ins.mode),
+        //         INC => self.inc(&ins.mode),
+        //         INX => self.inx(),
+        //         INY => self.iny(),
+        //         JMP => self.jmp(&ins.mode),
+        //         JSR => self.jsr(),
+        //         LDA => self.lda(&ins.mode),
+        //         LDX => self.ldx(&ins.mode),
+        //         LDY => self.ldy(&ins.mode),
+        //         LSR_A => self.lsr_a(),
+        //         LSR => self.lsr(&ins.mode),
+        //         NOP => /* no change */ (),
+        //         ORA => self.ora(&ins.mode),
+        //         PHA => self.pha(),
+        //         PHP => self.php(),
+        //         PLA => self.pla(),
+        //         PLP => self.plp(),
+        //         ROL_A => self.rol_a(),
+        //         ROL => self.rol(&ins.mode),
+        //         ROR_A => self.ror_a(),
+        //         ROR => self.ror(&ins.mode),
+        //         RTI => self.rti(),
+        //         RTS => self.rts(),
+        //         SBC => {
+        //             // TODO
+        //             self.sbc(&ins.mode)
+        //         },
+        //         SEC => self.set_status(Status::Carry),
+        //         SED => self.set_status(Status::Decimal),
+        //         SEI => self.set_status(Status::InterruptDisable),
+        //         STA => self.sta(&ins.mode),
+        //         STX => self.stx(&ins.mode),
+        //         STY => self.sty(&ins.mode),
+        //         TAX => self.tax(),
+        //         TAY => self.tay(),
+        //         TSX => self.tsx(),
+        //         TXA => self.txa(&ins.mode),
+        //         TXS => self.txs(),
+        //         TYA => self.tya(),
+        //     }
+        //
+        //     // increase prog_counter
+        //     // (ins.bytes - 1) because we already increased it by 1 at the beginning
+        //     self.prog_counter += (ins.bytes - 1) as u16;
+        //
+        // }
+    }
+
+    pub fn interpret_callback<F>(&mut self, mut callback: F)
+    where
+        F: FnMut(&mut CPU)
+    {
         loop {
             let ins_code = self.memory.read(self.prog_counter);
             self.prog_counter += 1;
+            let prog_counter_state = self.prog_counter;
 
-            let ins: &Instruction = INSTRUCTION_MAP.get(&ins_code).expect("Code not recognized");
+            // let ins: &Instruction = INSTRUCTION_MAP.get(&ins_code).expect(format!("Code {:X} not recognized", ins_code).as_str());
+            let ins: &Instruction = match INSTRUCTION_MAP.get(&ins_code) {
+                Some(instruction) => instruction,
+                None => {
+                    eprintln!("Unrecognized opcode: 0x{:X}", ins_code);
+                    return;
+                }
+            };
+
+            println!(
+                "PC: {:X} OP: {:?} A: {} X: {} Y: {}",
+                self.prog_counter, ins, self.a.value(), self.x.value(), self.y.value()
+            );
 
             match ins.name {
-                // TODO
                 ADC => self.adc(&ins.mode),
                 AND => self.and(&ins.mode),
                 ASL_A => self.asl_a(),
@@ -622,7 +753,8 @@ impl CPU {
                 INC => self.inc(&ins.mode),
                 INX => self.inx(),
                 INY => self.iny(),
-                JMP => self.jmp(&ins.mode),
+                JMP_ABS => self.jmp_abs(),
+                JMP_IND => self.jmp_ind(),
                 JSR => self.jsr(),
                 LDA => self.lda(&ins.mode),
                 LDX => self.ldx(&ins.mode),
@@ -641,10 +773,7 @@ impl CPU {
                 ROR => self.ror(&ins.mode),
                 RTI => self.rti(),
                 RTS => self.rts(),
-                SBC => {
-                    // TODO
-                    self.sbc(&ins.mode)
-                },
+                SBC => self.sbc(&ins.mode),
                 SEC => self.set_status(Status::Carry),
                 SED => self.set_status(Status::Decimal),
                 SEI => self.set_status(Status::InterruptDisable),
@@ -659,10 +788,21 @@ impl CPU {
                 TYA => self.tya(),
             }
 
-            // increase prog_counter
-            // (ins.bytes - 1) because we already increased it by 1 at the beginning
-            self.prog_counter += (ins.bytes - 1) as u16;
+            if self.prog_counter == prog_counter_state {
+                // increase prog_counter
+                // (ins.bytes - 1) because we already increased it by 1 at the beginning
+                self.prog_counter += (ins.bytes - 1) as u16;
+            }
 
+            callback(self);
         }
+    }
+
+    pub fn mem_write(&mut self, address: u16, val: u8) {
+        self.memory.write(address, val);
+    }
+
+    pub fn mem_read(&self, address: u16) -> u8 {
+        self.memory.read(address)
     }
 }

@@ -24,6 +24,7 @@ pub struct CPUStatus {
 }
 
 impl CPUStatus {
+    /// Create a new CPU Status
     pub fn new() -> Self {
         CPUStatus {
             value: 0b0010_0000,
@@ -50,6 +51,7 @@ impl CPUStatus {
         self.value = 0;
     }
 
+    /// Function that sets the status to a specific value
     pub fn set_bits(&mut self, bits: u8) {
         self.value = bits;
     }

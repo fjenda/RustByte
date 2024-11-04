@@ -16,6 +16,8 @@ lazy_static! {
     };
 
     pub static ref INSTRUCTIONS: Vec<Instruction> = vec![
+        // Instruction::new(0x1a, OpName::NOP, 1, 2, Addressing::None),
+
         Instruction::new(0x00, OpName::BRK, 1, 7, Addressing::None),
         Instruction::new(0xea, OpName::NOP, 1, 2, Addressing::None),
 
@@ -125,8 +127,8 @@ lazy_static! {
 
 
         /* Branching */
-        Instruction::new(0x4c, OpName::JMP, 3, 3, Addressing::None), // Addressing that acts as Immediate
-        Instruction::new(0x6c, OpName::JMP, 3, 5, Addressing::None), // Addressing:Indirect with 6502 bug
+        Instruction::new(0x4c, OpName::JMP_ABS, 3, 3, Addressing::None), // Addressing that acts as Immediate
+        Instruction::new(0x6c, OpName::JMP_IND, 3, 5, Addressing::None), // Addressing:Indirect with 6502 bug
 
         Instruction::new(0x20, OpName::JSR, 3, 6, Addressing::None),
         Instruction::new(0x60, OpName::RTS, 1, 6, Addressing::None),
@@ -211,6 +213,7 @@ lazy_static! {
 }
 
 
+#[derive(Debug)]
 pub struct Instruction {
     pub address: u8,
     pub name: OpName,
@@ -231,6 +234,7 @@ impl Instruction {
     }
 }
 
+#[derive(Debug)]
 pub enum OpName {
     ADC,
     AND,
@@ -260,7 +264,8 @@ pub enum OpName {
     INC,
     INX,
     INY,
-    JMP,
+    JMP_ABS,
+    JMP_IND,
     JSR,
     LDA,
     LDX,

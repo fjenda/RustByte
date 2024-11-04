@@ -8,7 +8,7 @@ pub struct CPUStack {
     stack: [u8; 0x100],
 
     /// Stack pointer
-    pointer: u8,
+    pub pointer: u8,
 }
 
 impl CPUStack {
