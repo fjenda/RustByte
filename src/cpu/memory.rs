@@ -38,7 +38,7 @@ impl Memory {
 
         // set the 0xFFFC address
         // self.write_u16(0xFFFC, start);
-        self.write_u16(0xFFFC, 0x0600);
+        // self.write_u16(0xFFFC, 0x0600);
 
         Ok(())
     }

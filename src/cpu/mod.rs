@@ -5,3 +5,4 @@ mod register;
 mod memory;
 mod instructions;
 mod cpu_stack;
+mod bus;

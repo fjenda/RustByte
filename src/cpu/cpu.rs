@@ -1,10 +1,7 @@
 // https://www.nesdev.org/obelisk-6502-guide/reference.html
 
-use sdl2::event::Event;
-use sdl2::EventPump;
-use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
 use crate::cpu::addressing::Addressing;
+use crate::cpu::bus::Bus;
 use crate::cpu::register::Register;
 use crate::cpu::cpu_status::{CPUStatus, Status};
 use crate::cpu::instructions::{Instruction, INSTRUCTION_MAP, OpName::*};
@@ -27,7 +24,9 @@ pub struct CPU {
     /// CPU Memory
     pub memory: Memory,
 
-    // TODO: Stack Pointer
+    /// CPU BUS
+    pub bus: Bus,
+
     // 0x0100 - 0x01FF
     pub stack: CPUStack
 }
@@ -42,24 +41,24 @@ impl CPU {
             status: CPUStatus::new(),
             prog_counter: 0,
             memory: Memory::new(),
+            bus: Bus::new(),
             stack: CPUStack::new(),
         }
     }
 
     /// Function that loads the Program ROM into memory and resets the CPU
-    pub fn load_program(&mut self, program: Vec<u8>) -> Result<(), &'static str> {
+    pub fn load_program(&mut self, program: Vec<u8>) {
         // load new program into the memory
-        self.memory.load(program)?;
-
-        // reset the cpu
-        // self.reset();
+        for (i, byte) in program.iter().enumerate() {
+            self.write(0x0600 + i as u16, *byte);
+        }
 
         // start of the Program ROM
         // (actually it can be anything from 0x8000 to 0xFFFF)
-        // self.prog_counter = 0x8000;
-        // self.prog_counter = 0xC000;
+        self.write_u16(0xFFFC, 0x0600);
 
-        Ok(())
+        // reset the cpu
+        // self.reset();
     }
 
     /// Function that resets the CPU
@@ -76,7 +75,27 @@ impl CPU {
         self.stack.reset();
 
         // set prog_counter to address at 0xFFFC
-        self.prog_counter = self.memory.read_u16(0xFFFC);
+        self.prog_counter = self.read_u16(0xFFFC);
+    }
+
+    pub fn read(&self, address: u16) -> u8 {
+        // self.memory.read(address)
+        self.bus.read(address)
+    }
+
+    pub fn read_u16(&mut self, address: u16) -> u16 {
+        // self.memory.read_u16(address)
+        self.bus.read_u16(address)
+    }
+
+    pub fn write(&mut self, address: u16, val: u8) {
+        // self.memory.write(address, val);
+        self.bus.write(address, val);
+    }
+
+    pub fn write_u16(&mut self, address: u16, val: u16) {
+        // self.memory.write_u16(address, val);
+        self.bus.write_u16(address, val);
     }
 
     /// Function that handles the logic of setting Zero and Negative flags
@@ -103,10 +122,10 @@ impl CPU {
             Addressing::Immediate => self.prog_counter,
 
             // Zero Page
-            Addressing::ZeroPage => self.memory.read(self.prog_counter) as u16,
+            Addressing::ZeroPage => self.read(self.prog_counter) as u16,
             Addressing::ZeroPageX => {
                 // u8 value from memory
-                let val = self.memory.read(self.prog_counter);
+                let val = self.read(self.prog_counter);
 
                 // add register x value to it (wrap around if needed)
                 let addr = val.wrapping_add(self.x.value()) as u16;
@@ -114,7 +133,7 @@ impl CPU {
             },
             Addressing::ZeroPageY => {
                 // u8 value from memory
-                let val = self.memory.read(self.prog_counter);
+                let val = self.read(self.prog_counter);
 
                 // add register y value to it (wrap around if needed)
                 let addr = val.wrapping_add(self.y.value()) as u16;
@@ -122,10 +141,10 @@ impl CPU {
             },
 
             // Absolute
-            Addressing::Absolute => self.memory.read_u16(self.prog_counter),
+            Addressing::Absolute => self.read_u16(self.prog_counter),
             Addressing::AbsoluteX => {
                 // u16 value from memory
-                let val = self.memory.read_u16(self.prog_counter);
+                let val = self.read_u16(self.prog_counter);
 
                 // add register x value to it (wrap around if needed)
                 let addr = val.wrapping_add(self.x.value() as u16);
@@ -133,7 +152,7 @@ impl CPU {
             },
             Addressing::AbsoluteY => {
                 // u16 value from memory
-                let val = self.memory.read_u16(self.prog_counter);
+                let val = self.read_u16(self.prog_counter);
 
                 // add register y value to it (wrap around if needed)
                 let addr = val.wrapping_add(self.y.value() as u16);
@@ -143,23 +162,23 @@ impl CPU {
             // Indirect
             Addressing::IndirectX => {
                 // u8 value from memory
-                let val = self.memory.read(self.prog_counter);
+                let val = self.read(self.prog_counter);
 
                 // index into the memory
                 let index: u8 = val.wrapping_add(self.x.value());
 
                 // high and low
-                let low = self.memory.read(index as u16);
-                let high = self.memory.read(index.wrapping_add(1) as u16);
+                let low = self.read(index as u16);
+                let high = self.read(index.wrapping_add(1) as u16);
                 u16::from_le_bytes([low, high])
             },
             Addressing::IndirectY => {
                 // u8 value from memory
-                let val = self.memory.read(self.prog_counter);
+                let val = self.read(self.prog_counter);
 
                 // high and low
-                let low = self.memory.read(val as u16);
-                let high = self.memory.read(val.wrapping_add(1) as u16);
+                let low = self.read(val as u16);
+                let high = self.read(val.wrapping_add(1) as u16);
 
                 let tmp = u16::from_le_bytes([low, high]);
                 let addr = tmp.wrapping_add(self.y.value() as u16);
@@ -175,7 +194,7 @@ impl CPU {
 
     fn adc(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         let old_status = self.status.is_set(Status::Carry);
         let res = self.a.value().wrapping_add(param).wrapping_add(old_status as u8);
@@ -198,7 +217,7 @@ impl CPU {
 
     fn and(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         self.a.set(self.a.value() & param);
         self.zero_negative(self.a.value());
@@ -221,7 +240,7 @@ impl CPU {
 
     fn asl(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         // set carry flag
         match param & 0x80 {
@@ -231,14 +250,14 @@ impl CPU {
 
         // shift left
         let res = param << 1;
-        self.memory.write(address, res);
+        self.write(address, res);
         self.zero_negative(res);
     }
 
     fn branch(&mut self, condition: bool) {
         if condition {
             // get the offset
-            let offset = self.memory.read(self.prog_counter) as i8;
+            let offset = self.read(self.prog_counter) as i8;
             self.prog_counter = self.prog_counter.wrapping_add((1 + offset) as u16);
         }
     }
@@ -253,7 +272,7 @@ impl CPU {
 
     fn bit(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         match self.a.value() & param {
             0 => self.status.add(Status::Zero),
@@ -273,7 +292,7 @@ impl CPU {
 
     fn compare(&mut self, reg_val: u8, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         match param <= reg_val {
             true => self.status.add(Status::Carry),
@@ -284,10 +303,10 @@ impl CPU {
     }
     fn dec(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         let res = param.wrapping_sub(1);
-        self.memory.write(address, res);
+        self.write(address, res);
         self.zero_negative(res);
     }
 
@@ -303,7 +322,7 @@ impl CPU {
 
     fn eor(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         self.a.set(self.a.value() ^ param);
         self.zero_negative(self.a.value());
@@ -311,10 +330,10 @@ impl CPU {
 
     fn inc(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         let res = param.wrapping_add(1);
-        self.memory.write(address, res);
+        self.write(address, res);
         self.zero_negative(res);
     }
 
@@ -329,7 +348,7 @@ impl CPU {
     }
 
     fn jmp_abs(&mut self) {
-        let address = self.memory.read_u16(self.prog_counter);
+        let address = self.read_u16(self.prog_counter);
         self.prog_counter = address;
     }
 
@@ -338,12 +357,12 @@ impl CPU {
     // In this case fetches the LSB from $xxFF as expected but takes the MSB from $xx00.
     // This is fixed in some later chips like the 65SC02 so for compatibility always ensure the indirect vector is not at the end of the page.
     fn jmp_ind(&mut self) {
-        let address = self.memory.read_u16(self.prog_counter);
+        let address = self.read_u16(self.prog_counter);
 
         let indirect_ref = if CPU::is_page_boundary(address) {
             self.read_indirect_address(address)
         } else {
-            self.memory.read_u16(address)
+            self.read_u16(address)
         };
 
         self.prog_counter = indirect_ref;
@@ -357,13 +376,13 @@ impl CPU {
 
     // helper function for indirect jump
     fn read_indirect_address(&self, mem_address: u16) -> u16 {
-        let lo = self.memory.read(mem_address);
-        let hi = self.memory.read(mem_address & 0xFF00);
+        let lo = self.read(mem_address);
+        let hi = self.read(mem_address & 0xFF00);
         u16::from_le_bytes([lo, hi])
     }
 
     fn jsr(&mut self) {
-        let address = self.memory.read_u16(self.prog_counter);
+        let address = self.read_u16(self.prog_counter);
         self.stack.push_u16(self.prog_counter + 2 - 1);
         self.prog_counter = address;
     }
@@ -371,7 +390,7 @@ impl CPU {
     fn lda(&mut self, mode: &Addressing) {
         // get param from memory
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         // set param
         self.a.set(param);
@@ -381,7 +400,7 @@ impl CPU {
     fn ldx(&mut self, mode: &Addressing) {
         // get param from memory
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         // set param
         self.x.set(param);
@@ -391,7 +410,7 @@ impl CPU {
     fn ldy(&mut self, mode: &Addressing) {
         // get param from memory
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         // set param
         self.y.set(param);
@@ -415,7 +434,7 @@ impl CPU {
 
     fn lsr(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         // set carry flag
         match param & 0x01 {
@@ -425,13 +444,13 @@ impl CPU {
 
         // shift right
         let res = param >> 1;
-        self.memory.write(address, res);
+        self.write(address, res);
         self.zero_negative(res);
     }
 
     fn ora(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         self.a.set(self.a.value() | param);
         self.zero_negative(self.a.value());
@@ -471,7 +490,7 @@ impl CPU {
 
     fn rol(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         // set carry flag
         match param & 0x80 {
@@ -481,7 +500,7 @@ impl CPU {
 
         // shift left
         let res = param << 1;
-        self.memory.write(address, res);
+        self.write(address, res);
         self.zero_negative(res);
     }
 
@@ -505,7 +524,7 @@ impl CPU {
 
     fn ror(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
         let old_status = self.status.is_set(Status::Carry);
 
         // set carry flag
@@ -519,7 +538,7 @@ impl CPU {
         if old_status {
             res |= 0x80;
         }
-        self.memory.write(address, res);
+        self.write(address, res);
 
         match res >> 7 {
             1 => self.status.add(Status::Negative),
@@ -539,7 +558,7 @@ impl CPU {
 
     fn sbc(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        let param = self.memory.read(address);
+        let param = self.read(address);
 
         let old_status = self.status.is_set(Status::Carry);
         let res = self.a.value().wrapping_sub(param).wrapping_sub(!old_status as u8);
@@ -574,17 +593,17 @@ impl CPU {
 
     fn sta(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        self.memory.write(address, self.a.value());
+        self.write(address, self.a.value());
     }
 
     fn stx(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        self.memory.write(address, self.x.value());
+        self.write(address, self.x.value());
     }
 
     fn sty(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
-        self.memory.write(address, self.y.value());
+        self.write(address, self.y.value());
     }
 
     fn tax(&mut self) {
@@ -622,7 +641,7 @@ impl CPU {
     pub fn interpret(&mut self) {
         self.interpret_callback(|_| {});
         // loop {
-        //     let ins_code = self.memory.read(self.prog_counter);
+        //     let ins_code = self.read(self.prog_counter);
         //     self.prog_counter += 1;
         //
         //     let ins: &Instruction = INSTRUCTION_MAP.get(&ins_code).expect("Code not recognized");
@@ -706,7 +725,7 @@ impl CPU {
         F: FnMut(&mut CPU)
     {
         loop {
-            let ins_code = self.memory.read(self.prog_counter);
+            let ins_code = self.read(self.prog_counter);
             self.prog_counter += 1;
             let prog_counter_state = self.prog_counter;
 
@@ -796,13 +815,5 @@ impl CPU {
 
             callback(self);
         }
-    }
-
-    pub fn mem_write(&mut self, address: u16, val: u8) {
-        self.memory.write(address, val);
-    }
-
-    pub fn mem_read(&self, address: u16) -> u8 {
-        self.memory.read(address)
     }
 }

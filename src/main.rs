@@ -12,16 +12,16 @@ fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
                 std::process::exit(0)
             },
             Event::KeyDown { keycode: Some(Keycode::W), .. } => {
-                cpu.mem_write(0xff, 0x77);
+                cpu.write(0xff, 0x77);
             },
             Event::KeyDown { keycode: Some(Keycode::S), .. } => {
-                cpu.mem_write(0xff, 0x73);
+                cpu.write(0xff, 0x73);
             },
             Event::KeyDown { keycode: Some(Keycode::A), .. } => {
-                cpu.mem_write(0xff, 0x61);
+                cpu.write(0xff, 0x61);
             },
             Event::KeyDown { keycode: Some(Keycode::D), .. } => {
-                cpu.mem_write(0xff, 0x64);
+                cpu.write(0xff, 0x64);
             }
             _ => {/* do nothing */}
         }
@@ -46,7 +46,7 @@ fn read_screen_state(cpu: &CPU, frame: &mut [u8; 32 * 3 * 32]) -> bool {
     let mut frame_idx = 0;
     let mut update = false;
     for i in 0x0200..0x600 {
-        let color_idx = cpu.mem_read(i as u16);
+        let color_idx = cpu.read(i as u16);
         let (b1, b2, b3) = color(color_idx).rgb();
         if frame[frame_idx] != b1 || frame[frame_idx + 1] != b2 || frame[frame_idx + 2] != b3 {
             frame[frame_idx] = b1;
@@ -102,7 +102,7 @@ fn main() {
     ];
     //load the game
     let mut cpu = CPU::new();
-    cpu.load_program(game_code).expect("Failed to load program");
+    cpu.load_program(game_code);
     cpu.reset();
 
     let mut screen_state = [0 as u8; 32 * 3 * 32];
@@ -112,7 +112,7 @@ fn main() {
     cpu.interpret_callback(move |cpu| {
         handle_user_input(cpu, &mut event_pump);
 
-        cpu.mem_write(0xfe, rng.gen_range(1..16));
+        cpu.write(0xfe, rng.gen_range(1..16));
 
         if read_screen_state(cpu, &mut screen_state) {
             texture.update(None, &screen_state, 32 * 3).unwrap();
