@@ -2,11 +2,9 @@
 
 use crate::cpu::addressing::Addressing;
 use crate::cpu::bus::Bus;
-use crate::cpu::cartridge::Cartridge;
 use crate::cpu::register::Register;
 use crate::cpu::cpu_status::{CPUStatus, Status};
 use crate::cpu::instructions::{Instruction, INSTRUCTION_MAP, OpName::*};
-use crate::cpu::memory::Memory;
 use crate::cpu::cpu_stack::CPUStack;
 
 /// This class represents the CPU
@@ -23,7 +21,7 @@ pub struct CPU {
     pub prog_counter: u16,
 
     /// CPU Memory
-    pub memory: Memory,
+    // pub memory: Memory,
 
     /// CPU BUS
     pub bus: Bus,
@@ -41,26 +39,27 @@ impl CPU {
             y: Register::new(),
             status: CPUStatus::new(),
             prog_counter: 0,
-            memory: Memory::new(),
+            // memory: Memory::new(),
             bus,
             stack: CPUStack::new(),
         }
     }
 
     /// Function that loads the Program ROM into memory and resets the CPU
-    pub fn load_program(&mut self, program: Vec<u8>) {
-        // load new program into the memory
-        for (i, byte) in program.iter().enumerate() {
-            self.write(0x0600 + i as u16, *byte);
-        }
-
-        // start of the Program ROM
-        // (actually it can be anything from 0x8000 to 0xFFFF)
-        self.write_u16(0xFFFC, 0x0600);
-
-        // reset the cpu
-        // self.reset();
-    }
+    /// Unused for now since we are using the bus
+    // pub fn load_program(&mut self, program: Vec<u8>) {
+    //     // load new program into the memory
+    //     for (i, byte) in program.iter().enumerate() {
+    //         self.write(0x0600 + i as u16, *byte);
+    //     }
+    //
+    //     // start of the Program ROM
+    //     // (actually it can be anything from 0x8000 to 0xFFFF)
+    //     self.write_u16(0xFFFC, 0x0600);
+    //
+    //     // reset the cpu
+    //     // self.reset();
+    // }
 
     /// Function that resets the CPU
     pub fn reset(&mut self) {
@@ -629,86 +628,9 @@ impl CPU {
     /// Function that interprets the given program
     pub fn interpret(&mut self) {
         self.interpret_callback(|_| {});
-        // loop {
-        //     let ins_code = self.read(self.prog_counter);
-        //     self.prog_counter += 1;
-        //
-        //     let ins: &Instruction = INSTRUCTION_MAP.get(&ins_code).expect("Code not recognized");
-        //
-        //     match ins.name {
-        //         // TODO
-        //         ADC => self.adc(&ins.mode),
-        //         AND => self.and(&ins.mode),
-        //         ASL_A => self.asl_a(),
-        //         ASL => self.asl(&ins.mode),
-        //         BIT => self.bit(&ins.mode),
-        //         BCS => self.branch(self.status.is_set(Status::Carry)),
-        //         BCC => self.branch(!self.status.is_set(Status::Carry)),
-        //         BEQ => self.branch(self.status.is_set(Status::Zero)),
-        //         BNE => self.branch(!self.status.is_set(Status::Zero)),
-        //         BMI => self.branch(self.status.is_set(Status::Negative)),
-        //         BPL => self.branch(!self.status.is_set(Status::Negative)),
-        //         BVS => self.branch(self.status.is_set(Status::Overflow)),
-        //         BVC => self.branch(!self.status.is_set(Status::Overflow)),
-        //         BRK => return,
-        //         CLC => self.clear_status(Status::Carry),
-        //         CLD => self.clear_status(Status::Decimal),
-        //         CLI => self.clear_status(Status::InterruptDisable),
-        //         CLV => self.clear_status(Status::Overflow),
-        //         CMP => self.compare(self.a.value(), &ins.mode),
-        //         CPX => self.compare(self.x.value(), &ins.mode),
-        //         CPY => self.compare(self.y.value(), &ins.mode),
-        //         DEC => self.dec(&ins.mode),
-        //         DEX => self.dex(),
-        //         DEY => self.dey(),
-        //         EOR => self.eor(&ins.mode),
-        //         INC => self.inc(&ins.mode),
-        //         INX => self.inx(),
-        //         INY => self.iny(),
-        //         JMP => self.jmp(&ins.mode),
-        //         JSR => self.jsr(),
-        //         LDA => self.lda(&ins.mode),
-        //         LDX => self.ldx(&ins.mode),
-        //         LDY => self.ldy(&ins.mode),
-        //         LSR_A => self.lsr_a(),
-        //         LSR => self.lsr(&ins.mode),
-        //         NOP => /* no change */ (),
-        //         ORA => self.ora(&ins.mode),
-        //         PHA => self.pha(),
-        //         PHP => self.php(),
-        //         PLA => self.pla(),
-        //         PLP => self.plp(),
-        //         ROL_A => self.rol_a(),
-        //         ROL => self.rol(&ins.mode),
-        //         ROR_A => self.ror_a(),
-        //         ROR => self.ror(&ins.mode),
-        //         RTI => self.rti(),
-        //         RTS => self.rts(),
-        //         SBC => {
-        //             // TODO
-        //             self.sbc(&ins.mode)
-        //         },
-        //         SEC => self.set_status(Status::Carry),
-        //         SED => self.set_status(Status::Decimal),
-        //         SEI => self.set_status(Status::InterruptDisable),
-        //         STA => self.sta(&ins.mode),
-        //         STX => self.stx(&ins.mode),
-        //         STY => self.sty(&ins.mode),
-        //         TAX => self.tax(),
-        //         TAY => self.tay(),
-        //         TSX => self.tsx(),
-        //         TXA => self.txa(&ins.mode),
-        //         TXS => self.txs(),
-        //         TYA => self.tya(),
-        //     }
-        //
-        //     // increase prog_counter
-        //     // (ins.bytes - 1) because we already increased it by 1 at the beginning
-        //     self.prog_counter += (ins.bytes - 1) as u16;
-        //
-        // }
     }
 
+    /// Function that interprets the given program with a callback function
     pub fn interpret_callback<F>(&mut self, mut callback: F)
     where
         F: FnMut(&mut CPU)
@@ -718,7 +640,6 @@ impl CPU {
             self.prog_counter += 1;
             let prog_counter_state = self.prog_counter;
 
-            // let ins: &Instruction = INSTRUCTION_MAP.get(&ins_code).expect(format!("Code {:X} not recognized", ins_code).as_str());
             let ins: &Instruction = match INSTRUCTION_MAP.get(&ins_code) {
                 Some(instruction) => instruction,
                 None => {

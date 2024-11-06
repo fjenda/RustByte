@@ -7,4 +7,4 @@ mod instructions;
 mod cpu_stack;
 pub mod bus;
 pub mod cartridge;
-mod mirroring;
+pub mod mirroring;

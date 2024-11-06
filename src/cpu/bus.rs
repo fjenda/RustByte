@@ -1,24 +1,42 @@
+// https://www.nesdev.org/wiki/CPU_memory_map
+
+// [0x2000 - 0x4020] => redirected to hardware modules
+// [0x4020 - 0x6000] => unmapped, for cartridge use
+// [0x6000 - 0x8000] => cartridge RAM
+// [0x8000 - 0xFFFF] => Program ROM
+
+// Special addresses
+// [0xFFFC - 0xFFFD] => Reset vector
+
 use crate::cpu::cartridge::Cartridge;
+
 #[derive(Debug)]
 pub struct Bus {
-    v_ram: [u8; 2048],
+    ram: [u8; 2048],
     cartridge: Cartridge
 }
 
+/// Implementation of the Bus.
+/// The bus is the component that connects all the different parts of the NES
+/// It is responsible for reading and writing to the different memory regions
+/// https://wiki.nesdev.com/w/index.php/CPU_memory_map
 impl Bus {
+    /// Create a new Bus
     pub fn new(cartridge: Cartridge) -> Self {
         Bus {
-            v_ram: [0; 2048],
+            ram: [0; 2048],
             cartridge,
         }
     }
 
+    /// Function that returns a value read from the memory at a given address
+    /// This function will handle the different memory regions
     pub fn read(&self, addr: u16) -> u8 {
         match addr {
             0x0000 ..= 0x1FFF => {
                 // ram
                 // this makes sure that the ram is mirrored every 0x0800 bytes
-                self.v_ram[(addr & 0x07FF) as usize]
+                self.ram[(addr & 0x07FF) as usize]
             },
             0x2000 ..= 0x3FFF => {
                 // ppu registers
@@ -37,18 +55,22 @@ impl Bus {
         }
     }
 
+    /// Function that returns a u16 value read from the memory at a given address
+    /// CPU uses Little-Endian addressing
     pub fn read_u16(&self, addr: u16) -> u16 {
         let low = self.read(addr);
         let high = self.read(addr + 1);
         u16::from_le_bytes([low, high])
     }
 
+    /// Function that writes a value into the memory at a given address
+    /// This function will handle the different memory regions
     pub fn write(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000 ..= 0x1FFF => {
                 // ram
                 // this makes sure that the ram is mirrored every 0x0800 bytes
-                self.v_ram[(addr & 0x07FF) as usize] = val;
+                self.ram[(addr & 0x07FF) as usize] = val;
             },
             0x2000 ..= 0x3FFF => {
                 // ppu registers
@@ -65,14 +87,17 @@ impl Bus {
         }
     }
 
+    /// Function that writes a u16 value into the memory at a given address
+    /// CPU uses Little-Endian addressing
     pub fn write_u16(&mut self, addr: u16, val: u16) {
         let bytes = val.to_le_bytes();
         self.write(addr, bytes[0]);
         self.write(addr + 1, bytes[1]);
     }
 
+    /// Function that reads from the ROM
     fn read_from_rom(&self, addr: u16) -> u8 {
-        // adjust address by subtractiong the base address
+        // adjust address by subtracting the base address
         let mut adjusted_addr = addr.wrapping_sub(0x8000);
 
         // check if we need to handle mirroring
