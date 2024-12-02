@@ -1,7 +1,11 @@
+use crate::byte_status::ByteStatus;
+use crate::flags::PPUStatus;
 use crate::ppu::mirroring::Mirroring;
 use crate::ppu::address_register::AddressRegister;
 use crate::ppu::controller_register::ControllerRegister;
 use crate::ppu::mask_register::MaskRegister;
+use crate::ppu::scroll_register::ScrollRegister;
+use crate::ppu::status_register::StatusRegister;
 
 /// Class representing the PPU
 /// https://www.nesdev.org/wiki/PPU
@@ -10,7 +14,7 @@ use crate::ppu::mask_register::MaskRegister;
 pub struct PPU {
     /// PPU Memory
     /// 2kB of RAM dedicated to PPU
-    ram: [u8; 2048],
+    pub ram: [u8; 2048],
 
     /// Palette tables
     /// 32 bytes of palette data
@@ -23,19 +27,23 @@ pub struct PPU {
     /// max. 64 sprites (4 bytes each) = 256 bytes
     /// https://www.nesdev.org/wiki/PPU_OAM
     oam: [u8; 256],
+    oam_address: u8,
 
     /// Mirroring mode
     /// https://www.nesdev.org/wiki/Mirroring
     mirroring: Mirroring,
 
     /// PPUCTRL - Controller Register ($2000)
-    pub controller_register: ControllerRegister,
+    controller_register: ControllerRegister,
 
     /// PPUMASK - Mask Register ($2001)
-    pub mask_register: MaskRegister,
+    mask_register: MaskRegister,
 
     /// PPUSTATUS - Status Register ($2002)
     pub status_register: StatusRegister,
+
+    /// PPUSCROLL - Scroll Register ($2005)
+    scroll_register: ScrollRegister,
 
     /// PPUADDR - Address Register ($2006)
     pub address_register: AddressRegister,
@@ -52,12 +60,19 @@ impl PPU {
             palette: [0; 32],
             chr,
             oam: [0; 256],
+            oam_address: 0,
             mirroring,
-            address_register: AddressRegister::new(),
             controller_register: ControllerRegister::new(),
             mask_register: MaskRegister::new(),
+            status_register: StatusRegister::new(),
+            scroll_register: ScrollRegister::new(),
+            address_register: AddressRegister::new(),
             internal_buffer: 0,
         }
+    }
+
+    pub fn new_empty_rom() -> Self {
+        PPU::new(vec![0; 2048], Mirroring::Horizontal)
     }
 
     /// Handle mirroring of the PPU
@@ -81,9 +96,11 @@ impl PPU {
             // table 2 maps to table 0
             (Mirroring::Horizontal, 2) => vram_index - 0x400,
 
-            // table 1 maps back to table 0, and table 3 to table 1
-            // (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 3) => vram_index - 0x400 * name_table,
-            (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 3) => vram_index - 0x800,
+            // table 3 maps to table 1
+            (Mirroring::Horizontal, 1) => vram_index - 0x400,
+
+            // table 3 maps to table 1
+            (Mirroring::Horizontal, 3) => vram_index - 0x800,
 
             // no adjustment needed for tables 0 and 1 in both mirroring types
             _ => vram_index,
@@ -105,23 +122,27 @@ impl PPU {
 
         // https://www.nesdev.org/wiki/PPU_memory_map
         match addr {
-            0x0000 .. 0x1FFF => {
+            0x0000 ..= 0x1FFF => {
                 // pattern tables
                 let res = self.internal_buffer;
                 self.internal_buffer = self.chr[addr as usize];
                 res
             },
-            0x2000 .. 0x2FFF => {
+            0x2000 ..= 0x2FFF => {
                 // name tables
                 let res = self.internal_buffer;
-                self.internal_buffer = self.ram[addr as usize];
+                self.internal_buffer = self.ram[self.mirror(addr) as usize];
                 res
             },
-            0x3000 .. 0x3EFF => {
+            0x3000 ..= 0x3EFF => {
                 // unused
                 panic!("Reading from 0x3000 - 0x3EFF is not expected");
             },
-            0x3F00 .. 0x3FFF => {
+            0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
+                // mirror of 0x3F00 - 0x3F0F
+                self.palette[(addr - 0x3F00 - 0x10) as usize]
+            },
+            0x3F00 ..= 0x3FFF => {
                 // palette
                 self.palette[(addr - 0x3F00) as usize]
             },
@@ -137,19 +158,23 @@ impl PPU {
         let addr = self.address_register.get();
 
         match addr {
-            0x0000 .. 0x1FFF => {
+            0x0000 ..= 0x1FFF => {
                 // pattern tables
                 panic!("Writing to 0x0000 - 0x1FFF (CHR) is not expected");
             },
-            0x2000 .. 0x2FFF => {
+            0x2000 ..= 0x2FFF => {
                 // name tables
                 self.ram[self.mirror(addr) as usize] = val;
             },
-            0x3000 .. 0x3EFF => {
+            0x3000 ..= 0x3EFF => {
                 // unused
                 panic!("Writing to 0x3000 - 0x3EFF is not expected");
             },
-            0x3F00 .. 0x3FFF => {
+            0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
+                // mirror of 0x3F00 - 0x3F0F
+                self.palette[(addr - 0x3F00 - 0x10) as usize] = val;
+            },
+            0x3F00 ..= 0x3FFF => {
                 // palette
                 self.palette[(addr - 0x3F00) as usize] = val;
             },
@@ -161,4 +186,58 @@ impl PPU {
         // PPUADDR is incremented by 1 or 32 depending on the value of PPUCTRL
         self.address_register.add(self.controller_register.vram_increment());
     }
+
+    pub fn read_status_register(&mut self) -> u8 {
+        let res = self.status_register.value;
+
+        // clear the vblank flag
+        self.status_register.remove(PPUStatus::Vblank.as_u8());
+
+        // clear the address latch
+        self.address_register.reset_high_byte();
+
+        // clear the scroll latch
+        self.scroll_register.reset_latch();
+
+        res
+    }
+
+    // Helper functions for reading and writing to the PPU registers
+    pub fn write_oam_dma(&mut self, data: &[u8; 256]) {
+        for x in data.iter() {
+            self.oam[self.oam_address as usize] = *x;
+            self.oam_address = self.oam_address.wrapping_add(1);
+        }
+    }
+
+    pub fn read_oam_data(&mut self) -> u8 {
+        self.oam[self.oam_address as usize]
+    }
+
+    pub fn write_oam_data(&mut self, val: u8) {
+        self.oam[self.oam_address as usize] = val;
+        self.oam_address = self.oam_address.wrapping_add(1);
+    }
+
+    pub fn write_oam_address(&mut self, val: u8) {
+        self.oam_address = val;
+    }
+
+    pub fn write_control_register(&mut self, val: u8) {
+        let before_nmi = self.controller_register.vblank();
+        self.controller_register.set_bits(val);
+    }
+
+    pub fn write_mask_register(&mut self, val: u8) {
+        self.mask_register.set_bits(val);
+    }
+
+    pub fn write_scroll_register(&mut self, val: u8) {
+        self.scroll_register.write(val);
+    }
+
+    pub fn write_address_register(&mut self, val: u8) {
+        self.address_register.set(val);
+    }
 }
+

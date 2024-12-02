@@ -4,7 +4,8 @@ use crate::byte_status::ByteStatus;
 use crate::cpu::addressing::Addressing;
 use crate::cpu::bus::Bus;
 use crate::cpu::cpu_register::CPURegister;
-use crate::cpu::cpu_status::{CPUStatus, Status};
+use crate::cpu::cpu_status::{CPUStatus};
+use crate::flags::Status;
 use crate::cpu::instructions::{Instruction, INSTRUCTION_MAP, OpName::*};
 use crate::cpu::cpu_stack::CPUStack;
 
@@ -103,20 +104,19 @@ impl CPU {
     fn zero_negative(&mut self, res: u8) {
         // Zero Flag
         match res {
-            0 => self.status.add(Status::Zero),
-            _ => self.status.remove(Status::Zero),
+            0 => self.status.add(Status::Zero.as_u8()),
+            _ => self.status.remove(Status::Zero.as_u8()),
         }
 
         // Negative Flag
         match res & Status::Negative.as_u8() {
-            0 => self.status.remove(Status::Negative),
-            _ => self.status.add(Status::Negative),
+            0 => self.status.remove(Status::Negative.as_u8()),
+            _ => self.status.add(Status::Negative.as_u8()),
         }
     }
 
     // https://www.nesdev.org/obelisk-6502-guide/addressing.html
     /// Function that gets the parameter address for a function using its addressing mode
-    /// TODO: page wrapping
     fn get_param_address(&mut self, mode: &Addressing) -> u16 {
         match mode {
             // Immediate
@@ -197,19 +197,19 @@ impl CPU {
         let address = self.get_param_address(mode);
         let param = self.read(address);
 
-        let old_status = self.status.is_set(Status::Carry);
+        let old_status = self.status.is_set(Status::Carry.as_u8());
         let res = self.a.value().wrapping_add(param).wrapping_add(old_status as u8);
 
         // set carry flag
         match res < self.a.value() {
-            true => self.status.add(Status::Carry),
-            false => self.status.remove(Status::Carry),
+            true => self.status.add(Status::Carry.as_u8()),
+            false => self.status.remove(Status::Carry.as_u8()),
         }
 
         // set overflow flag
         match (self.a.value() ^ res) & (param ^ res) & 0x80 {
-            0 => self.status.remove(Status::Overflow),
-            _ => self.status.add(Status::Overflow),
+            0 => self.status.remove(Status::Overflow.as_u8()),
+            _ => self.status.add(Status::Overflow.as_u8()),
         }
 
         self.a.set(res);
@@ -229,8 +229,8 @@ impl CPU {
 
         // set carry flag
         match param & 0x80 {
-            0 => self.status.remove(Status::Carry),
-            _ => self.status.add(Status::Carry),
+            0 => self.status.remove(Status::Carry.as_u8()),
+            _ => self.status.add(Status::Carry.as_u8()),
         }
 
         // shift left
@@ -245,8 +245,8 @@ impl CPU {
 
         // set carry flag
         match param & 0x80 {
-            0 => self.status.remove(Status::Carry),
-            _ => self.status.add(Status::Carry),
+            0 => self.status.remove(Status::Carry.as_u8()),
+            _ => self.status.add(Status::Carry.as_u8()),
         }
 
         // shift left
@@ -264,11 +264,11 @@ impl CPU {
     }
 
     fn clear_status(&mut self, status: Status) {
-        self.status.remove(status);
+        self.status.remove(status.as_u8());
     }
 
     fn set_status(&mut self, status: Status) {
-        self.status.add(status);
+        self.status.add(status.as_u8());
     }
 
     fn bit(&mut self, mode: &Addressing) {
@@ -276,18 +276,18 @@ impl CPU {
         let param = self.read(address);
 
         match self.a.value() & param {
-            0 => self.status.add(Status::Zero),
-            _ => self.status.remove(Status::Zero),
+            0 => self.status.add(Status::Zero.as_u8()),
+            _ => self.status.remove(Status::Zero.as_u8()),
         }
 
         match param & Status::Negative.as_u8() {
-            0 => self.status.remove(Status::Negative),
-            _ => self.status.add(Status::Negative),
+            0 => self.status.remove(Status::Negative.as_u8()),
+            _ => self.status.add(Status::Negative.as_u8()),
         }
 
         match param & Status::Overflow.as_u8() {
-            0 => self.status.remove(Status::Overflow),
-            _ => self.status.add(Status::Overflow),
+            0 => self.status.remove(Status::Overflow.as_u8()),
+            _ => self.status.add(Status::Overflow.as_u8()),
         }
     }
 
@@ -296,8 +296,8 @@ impl CPU {
         let param = self.read(address);
 
         match param <= reg_val {
-            true => self.status.add(Status::Carry),
-            false => self.status.remove(Status::Carry),
+            true => self.status.add(Status::Carry.as_u8()),
+            false => self.status.remove(Status::Carry.as_u8()),
         }
 
         self.zero_negative(reg_val.wrapping_sub(param));
@@ -423,8 +423,8 @@ impl CPU {
 
         // set carry flag
         match param & 0x01 {
-            0 => self.status.remove(Status::Carry),
-            _ => self.status.add(Status::Carry),
+            0 => self.status.remove(Status::Carry.as_u8()),
+            _ => self.status.add(Status::Carry.as_u8()),
         }
 
         // shift right
@@ -439,8 +439,8 @@ impl CPU {
 
         // set carry flag
         match param & 0x01 {
-            0 => self.status.remove(Status::Carry),
-            _ => self.status.add(Status::Carry),
+            0 => self.status.remove(Status::Carry.as_u8()),
+            _ => self.status.add(Status::Carry.as_u8()),
         }
 
         // shift right
@@ -479,8 +479,8 @@ impl CPU {
 
         // set carry flag
         match param & 0x80 {
-            0 => self.status.remove(Status::Carry),
-            _ => self.status.add(Status::Carry),
+            0 => self.status.remove(Status::Carry.as_u8()),
+            _ => self.status.add(Status::Carry.as_u8()),
         }
 
         // shift left
@@ -495,8 +495,8 @@ impl CPU {
 
         // set carry flag
         match param & 0x80 {
-            0 => self.status.remove(Status::Carry),
-            _ => self.status.add(Status::Carry),
+            0 => self.status.remove(Status::Carry.as_u8()),
+            _ => self.status.add(Status::Carry.as_u8()),
         }
 
         // shift left
@@ -507,12 +507,12 @@ impl CPU {
 
     fn ror_a(&mut self) {
         let param = self.a.value();
-        let old_status = self.status.is_set(Status::Carry);
+        let old_status = self.status.is_set(Status::Carry.as_u8());
 
         // set carry flag
         match param & 0x01 {
-            0 => self.status.remove(Status::Carry),
-            _ => self.status.add(Status::Carry),
+            0 => self.status.remove(Status::Carry.as_u8()),
+            _ => self.status.add(Status::Carry.as_u8()),
         }
 
         // shift right
@@ -526,12 +526,12 @@ impl CPU {
     fn ror(&mut self, mode: &Addressing) {
         let address = self.get_param_address(mode);
         let param = self.read(address);
-        let old_status = self.status.is_set(Status::Carry);
+        let old_status = self.status.is_set(Status::Carry.as_u8());
 
         // set carry flag
         match param & 0x01 {
-            0 => self.status.remove(Status::Carry),
-            _ => self.status.add(Status::Carry),
+            0 => self.status.remove(Status::Carry.as_u8()),
+            _ => self.status.add(Status::Carry.as_u8()),
         }
 
         // shift right
@@ -542,8 +542,8 @@ impl CPU {
         self.write(address, res);
 
         match res >> 7 {
-            1 => self.status.add(Status::Negative),
-            _ => self.status.remove(Status::Negative),
+            1 => self.status.add(Status::Negative.as_u8()),
+            _ => self.status.remove(Status::Negative.as_u8()),
         }
     }
 
@@ -561,19 +561,19 @@ impl CPU {
         let address = self.get_param_address(mode);
         let param = self.read(address);
 
-        let old_status = self.status.is_set(Status::Carry);
+        let old_status = self.status.is_set(Status::Carry.as_u8());
         let res = self.a.value().wrapping_sub(param).wrapping_sub(!old_status as u8);
 
         // Set carry flag (no borrow occurred)
         match self.a.value() >= param + (!old_status as u8) {
-            true => self.status.add(Status::Carry),
-            false => self.status.remove(Status::Carry),
+            true => self.status.add(Status::Carry.as_u8()),
+            false => self.status.remove(Status::Carry.as_u8()),
         }
 
         // Set overflow flag
         match (self.a.value() ^ res) & (param ^ res) & 0x80 {
-            0 => self.status.remove(Status::Overflow),
-            _ => self.status.add(Status::Overflow),
+            0 => self.status.remove(Status::Overflow.as_u8()),
+            _ => self.status.add(Status::Overflow.as_u8()),
         }
 
         self.a.set(res);
@@ -660,14 +660,14 @@ impl CPU {
                 ASL_A => self.asl_a(),
                 ASL => self.asl(&ins.mode),
                 BIT => self.bit(&ins.mode),
-                BCS => self.branch(self.status.is_set(Status::Carry)),
-                BCC => self.branch(!self.status.is_set(Status::Carry)),
-                BEQ => self.branch(self.status.is_set(Status::Zero)),
-                BNE => self.branch(!self.status.is_set(Status::Zero)),
-                BMI => self.branch(self.status.is_set(Status::Negative)),
-                BPL => self.branch(!self.status.is_set(Status::Negative)),
-                BVS => self.branch(self.status.is_set(Status::Overflow)),
-                BVC => self.branch(!self.status.is_set(Status::Overflow)),
+                BCS => self.branch(self.status.is_set(Status::Carry.as_u8())),
+                BCC => self.branch(!self.status.is_set(Status::Carry.as_u8())),
+                BEQ => self.branch(self.status.is_set(Status::Zero.as_u8())),
+                BNE => self.branch(!self.status.is_set(Status::Zero.as_u8())),
+                BMI => self.branch(self.status.is_set(Status::Negative.as_u8())),
+                BPL => self.branch(!self.status.is_set(Status::Negative.as_u8())),
+                BVS => self.branch(self.status.is_set(Status::Overflow.as_u8())),
+                BVC => self.branch(!self.status.is_set(Status::Overflow.as_u8())),
                 BRK => return,
                 CLC => self.clear_status(Status::Carry),
                 CLD => self.clear_status(Status::Decimal),

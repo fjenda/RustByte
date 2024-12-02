@@ -8,7 +8,6 @@
 // Special addresses
 // [0xFFFC - 0xFFFD] => Reset vector
 
-use crate::byte_status::ByteStatus;
 use crate::ppu::cartridge::Cartridge;
 use crate::ppu::ppu::PPU;
 
@@ -50,8 +49,12 @@ impl Bus {
             },
             0x2002 => {
                 // ppu status register
-                todo!("PPU status register is not supported yet");
+                self.ppu.read_status_register()
             },
+            0x2004 => {
+                // ppu oam data register
+                self.ppu.read_oam_data()
+            }
             0x2007 => {
                 // ppu data register
                 self.ppu.read()
@@ -91,31 +94,27 @@ impl Bus {
             },
             0x2000 => {
                 // PPUCTRL
-                let vblank = self.ppu.controller_register.vblank();
-                self.ppu.controller_register.set_bits(val);
+                self.ppu.write_control_register(val);
             },
             0x2001 => {
                 // PPUMASK
-                self.ppu.mask_register.set_bits(val);
+                self.ppu.write_mask_register(val);
             },
             0x2003 => {
                 // OAMADDR
-                todo!("OAMADDR is not supported yet");
-                // self.ppu.oam_address_register.set(val);
+                self.ppu.write_oam_address(val);
             },
             0x2004 => {
                 // OAMDATA
-                todo!("OAMDATA is not supported yet");
-                // self.ppu.oam_data_register.set(val);
+                self.ppu.write_oam_data(val);
             },
             0x2005 => {
                 // PPUSCROLL
-                todo!("PPUSCROLL is not supported yet");
-                // self.ppu.scroll_register.set(val);
+                self.ppu.write_scroll_register(val);
             },
             0x2006 => {
                 // ppu address register
-                self.ppu.address_register.set(val);
+                self.ppu.write_address_register(val);
             },
             0x2007 => {
                 // ppu data register
@@ -123,7 +122,8 @@ impl Bus {
             },
             0x2000 ..= 0x3FFF => {
                 // ppu registers
-                // self.vram[(addr & 0x2007) as usize] = val;
+                let mirror_addr = addr & 0x2007;
+                self.write(mirror_addr, val);
             },
             0x8000 ..= 0xFFFF => {
                 // cartridge

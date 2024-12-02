@@ -1,7 +1,7 @@
 // https://www.nesdev.org/wiki/PPU_registers#PPUCTRL_-_Miscellaneous_settings_($2000_write)
 
 use crate::byte_status::ByteStatus;
-use crate::flags::Settings;
+use crate::flags::{Settings};
 
 /// Class representing a PPU Controller Register $2000
 #[derive(Debug)]
@@ -19,7 +19,7 @@ impl ControllerRegister {
 
     /// Increment value of VRAM address after accessing memory
     pub fn vram_increment(&self) -> u8 {
-        if self.is_set(Settings::VRAM) {
+        if self.is_set(Settings::VRAM.as_u8()) {
             32
         } else {
             1
@@ -27,7 +27,7 @@ impl ControllerRegister {
     }
 
     pub fn sprite_pattern_table(&self) -> u16 {
-        if self.is_set(Settings::Sprite) {
+        if self.is_set(Settings::Sprite.as_u8()) {
             0x1000
         } else {
             0
@@ -35,7 +35,7 @@ impl ControllerRegister {
     }
 
     pub fn background_pattern_table(&self) -> u16 {
-        if self.is_set(Settings::Background) {
+        if self.is_set(Settings::Background.as_u8()) {
             0x1000
         } else {
             0
@@ -43,7 +43,7 @@ impl ControllerRegister {
     }
 
     pub fn sprite_size(&self) -> u8 {
-        if self.is_set(Settings::SpriteSize) {
+        if self.is_set(Settings::SpriteSize.as_u8()) {
             16
         } else {
             8
@@ -61,28 +61,28 @@ impl ControllerRegister {
     }
 
     pub fn vblank(&self) -> bool {
-        self.is_set(Settings::Vblank)
+        self.is_set(Settings::Vblank.as_u8())
     }
 
     pub fn master_slave(&self) -> bool {
-        self.is_set(Settings::MasterSlave)
+        self.is_set(Settings::MasterSlave.as_u8())
     }
 }
 
 impl ByteStatus for ControllerRegister {
     /// Add a flag to the Controller Register
-    fn add(&mut self, status: Settings) {
-        self.value |= status.as_u8();
+    fn add(&mut self, flag: u8) {
+        self.value |= flag;
     }
 
     /// Remove a flag from the Controller Register
-    fn remove(&mut self, status: Settings) {
-        self.value &= !status.as_u8()
+    fn remove(&mut self, flag: u8) {
+        self.value &= !flag
     }
 
     /// Check if a flag is set in the Controller Register
-    fn is_set(&self, status: Settings) -> bool {
-        self.value & status.as_u8() != 0
+    fn is_set(&self, flag: u8) -> bool {
+        self.value & flag != 0
     }
 
     /// Function that resets the register to 0

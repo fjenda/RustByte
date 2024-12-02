@@ -1,7 +1,6 @@
 // https://www.nesdev.org/wiki/PPU_registers#PPUMASK_-_Rendering_settings_($2001_write)
 
 use crate::byte_status::ByteStatus;
-use crate::flags::Mask;
 
 #[derive(Debug)]
 pub struct MaskRegister {
@@ -18,16 +17,16 @@ impl MaskRegister {
 
 impl ByteStatus for MaskRegister {
 
-    fn add(&mut self, status: Mask) {
-        self.value |= status.as_u8();
+    fn add(&mut self, flag: u8) {
+        self.value |= flag;
     }
 
-    fn remove(&mut self, status: Mask) {
-        self.value &= !status.as_u8()
+    fn remove(&mut self, flag: u8) {
+        self.value &= !flag
     }
 
-    fn is_set(&self, status: Mask) -> bool {
-        self.value & status.as_u8() != 0
+    fn is_set(&self, flag: u8) -> bool {
+        self.value & flag != 0
     }
 
     fn reset(&mut self) {
