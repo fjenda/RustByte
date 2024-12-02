@@ -5,7 +5,7 @@ use sdl2::keyboard::Keycode;
 use sdl2::pixels::{Color, PixelFormatEnum};
 use rust_byte::cpu::bus::Bus;
 use rust_byte::cpu::cpu::CPU;
-use rust_byte::cpu::cartridge::Cartridge;
+use rust_byte::ppu::cartridge::Cartridge;
 
 fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
     for event in event_pump.poll_iter() {

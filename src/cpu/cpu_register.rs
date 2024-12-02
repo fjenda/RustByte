@@ -1,14 +1,14 @@
 // https://www.nesdev.org/wiki/CPU_registers
 
 /// Class representing one register in the CPU
-pub struct Register {
+pub struct CPURegister {
     value: u8
 }
 
-impl Register {
+impl CPURegister {
     /// Creates new instance of the object
     pub fn new() -> Self {
-        Register {
+        CPURegister {
             value: 0
         }
     }

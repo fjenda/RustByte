@@ -2,14 +2,14 @@
 // https://formats.kaitai.io/ines/index.html
 // https://www.nesdev.org/wiki/INES#iNES_file_format
 
-use crate::cpu::mirroring::Mirroring;
+use crate::ppu::mirroring::Mirroring;
 
 #[derive(Debug)]
 pub struct Cartridge {
     pub prg_rom: Vec<u8>,
-    chr_rom: Vec<u8>,
+    pub chr_rom: Vec<u8>,
     mapper: u8,
-    mirroring: Mirroring,
+    pub mirroring: Mirroring,
 }
 
 impl Cartridge {

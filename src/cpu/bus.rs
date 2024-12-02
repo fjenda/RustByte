@@ -8,12 +8,15 @@
 // Special addresses
 // [0xFFFC - 0xFFFD] => Reset vector
 
-use crate::cpu::cartridge::Cartridge;
+use crate::byte_status::ByteStatus;
+use crate::ppu::cartridge::Cartridge;
+use crate::ppu::ppu::PPU;
 
 #[derive(Debug)]
 pub struct Bus {
     ram: [u8; 2048],
-    cartridge: Cartridge
+    prg: Vec<u8>,
+    ppu: PPU,
 }
 
 /// Implementation of the Bus.
@@ -23,25 +26,39 @@ pub struct Bus {
 impl Bus {
     /// Create a new Bus
     pub fn new(cartridge: Cartridge) -> Self {
+        let ppu = PPU::new(cartridge.chr_rom, cartridge.mirroring);
+
         Bus {
             ram: [0; 2048],
-            cartridge,
+            prg: cartridge.prg_rom,
+            ppu,
         }
     }
 
     /// Function that returns a value read from the memory at a given address
     /// This function will handle the different memory regions
-    pub fn read(&self, addr: u16) -> u8 {
+    pub fn read(&mut self, addr: u16) -> u8 {
         match addr {
             0x0000 ..= 0x1FFF => {
                 // ram
                 // this makes sure that the ram is mirrored every 0x0800 bytes
                 self.ram[(addr & 0x07FF) as usize]
             },
-            0x2000 ..= 0x3FFF => {
-                // ppu registers
-                // self.vram[(addr & 0x2007) as usize]
-                0
+            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
+                // write only registers
+                panic!("Write only register at address: {:#06X}", addr);
+            },
+            0x2002 => {
+                // ppu status register
+                todo!("PPU status register is not supported yet");
+            },
+            0x2007 => {
+                // ppu data register
+                self.ppu.read()
+            },
+            0x2008 ..= 0x3FFF => {
+                let mirror_addr = addr & 0x2007;
+                self.read(mirror_addr)
             },
             0x8000 ..= 0xFFFF => {
                 // cartridge
@@ -57,7 +74,7 @@ impl Bus {
 
     /// Function that returns a u16 value read from the memory at a given address
     /// CPU uses Little-Endian addressing
-    pub fn read_u16(&self, addr: u16) -> u16 {
+    pub fn read_u16(&mut self, addr: u16) -> u16 {
         let low = self.read(addr);
         let high = self.read(addr + 1);
         u16::from_le_bytes([low, high])
@@ -71,6 +88,38 @@ impl Bus {
                 // ram
                 // this makes sure that the ram is mirrored every 0x0800 bytes
                 self.ram[(addr & 0x07FF) as usize] = val;
+            },
+            0x2000 => {
+                // PPUCTRL
+                let vblank = self.ppu.controller_register.vblank();
+                self.ppu.controller_register.set_bits(val);
+            },
+            0x2001 => {
+                // PPUMASK
+                self.ppu.mask_register.set_bits(val);
+            },
+            0x2003 => {
+                // OAMADDR
+                todo!("OAMADDR is not supported yet");
+                // self.ppu.oam_address_register.set(val);
+            },
+            0x2004 => {
+                // OAMDATA
+                todo!("OAMDATA is not supported yet");
+                // self.ppu.oam_data_register.set(val);
+            },
+            0x2005 => {
+                // PPUSCROLL
+                todo!("PPUSCROLL is not supported yet");
+                // self.ppu.scroll_register.set(val);
+            },
+            0x2006 => {
+                // ppu address register
+                self.ppu.address_register.set(val);
+            },
+            0x2007 => {
+                // ppu data register
+                self.ppu.write(val);
             },
             0x2000 ..= 0x3FFF => {
                 // ppu registers
@@ -96,17 +145,17 @@ impl Bus {
     }
 
     /// Function that reads from the ROM
-    fn read_from_rom(&self, addr: u16) -> u8 {
+    fn read_from_rom(&mut self, addr: u16) -> u8 {
         // adjust address by subtracting the base address
         let mut adjusted_addr = addr.wrapping_sub(0x8000);
 
         // check if we need to handle mirroring
-        if self.cartridge.prg_rom.len() == 0x4000 && adjusted_addr >= 0x4000 {
+        if self.prg.len() == 0x4000 && adjusted_addr >= 0x4000 {
             // wrap address
             adjusted_addr %=  0x4000;
         }
 
         // return the value at the adjusted address
-        self.cartridge.prg_rom[adjusted_addr as usize]
+        self.prg[adjusted_addr as usize]
     }
 }

@@ -1,8 +1,9 @@
 // https://www.nesdev.org/obelisk-6502-guide/reference.html
 
+use crate::byte_status::ByteStatus;
 use crate::cpu::addressing::Addressing;
 use crate::cpu::bus::Bus;
-use crate::cpu::register::Register;
+use crate::cpu::cpu_register::CPURegister;
 use crate::cpu::cpu_status::{CPUStatus, Status};
 use crate::cpu::instructions::{Instruction, INSTRUCTION_MAP, OpName::*};
 use crate::cpu::cpu_stack::CPUStack;
@@ -10,9 +11,9 @@ use crate::cpu::cpu_stack::CPUStack;
 /// This class represents the CPU
 pub struct CPU {
     /// 3x 8-bit registers A (accumulator), X, Y (indexes)
-    pub a: Register,
-    pub x: Register,
-    pub y: Register,
+    pub a: CPURegister,
+    pub x: CPURegister,
+    pub y: CPURegister,
 
     /// CPU Status with Flags
     pub status: CPUStatus,
@@ -34,9 +35,9 @@ impl CPU {
     /// Creates an instance of CPU
     pub fn new(bus: Bus) -> Self {
         CPU {
-            a: Register::new(),
-            x: Register::new(),
-            y: Register::new(),
+            a: CPURegister::new(),
+            x: CPURegister::new(),
+            y: CPURegister::new(),
             status: CPUStatus::new(),
             prog_counter: 0,
             // memory: Memory::new(),
@@ -78,7 +79,7 @@ impl CPU {
         self.prog_counter = self.read_u16(0xFFFC);
     }
 
-    pub fn read(&self, address: u16) -> u8 {
+    pub fn read(&mut self, address: u16) -> u8 {
         // self.memory.read(address)
         self.bus.read(address)
     }
@@ -375,7 +376,7 @@ impl CPU {
     }
 
     // helper function for indirect jump
-    fn read_indirect_address(&self, mem_address: u16) -> u16 {
+    fn read_indirect_address(&mut self, mem_address: u16) -> u16 {
         let lo = self.read(mem_address);
         let hi = self.read(mem_address & 0xFF00);
         u16::from_le_bytes([lo, hi])
