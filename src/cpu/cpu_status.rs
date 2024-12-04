@@ -1,8 +1,10 @@
 // https://www.nesdev.org/wiki/Status_flags
 
+use std::fmt::{Display, Formatter};
 use crate::byte_status::ByteStatus;
 
 /// Class representing a CPU Status
+#[derive(Debug)]
 pub struct CPUStatus {
     pub value: u8,
 }
@@ -41,5 +43,11 @@ impl ByteStatus for CPUStatus {
     /// Function that sets the status to a specific value
     fn set_bits(&mut self, bits: u8) {
         self.value = bits;
+    }
+}
+
+impl Display for CPUStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:08b}", self.value)
     }
 }

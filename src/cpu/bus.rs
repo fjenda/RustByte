@@ -11,8 +11,7 @@
 use crate::ppu::cartridge::Cartridge;
 use crate::ppu::ppu::PPU;
 
-#[derive(Debug)]
-pub struct Bus {
+pub struct Bus<'callback> {
     /// 2kB of RAM
     ram: [u8; 2048],
 
@@ -23,16 +22,22 @@ pub struct Bus {
     ppu: PPU,
 
     /// Number of cycles
-    cycles: usize,
+    pub(crate) cycles: usize,
+
+    /// Game callback
+    game: Box<dyn FnMut(&PPU) + 'callback>
 }
 
 /// Implementation of the Bus.
 /// The bus is the component that connects all the different parts of the NES
 /// It is responsible for reading and writing to the different memory regions
 /// https://wiki.nesdev.com/w/index.php/CPU_memory_map
-impl Bus {
+impl<'a> Bus<'a> {
     /// Create a new Bus
-    pub fn new(cartridge: Cartridge) -> Self {
+    pub fn new<'callback, F>(cartridge: Cartridge, callback: F) -> Bus<'callback>
+    where
+        F: FnMut(&PPU) + 'callback,
+    {
         let ppu = PPU::new(cartridge.chr_rom, cartridge.mirroring);
 
         Bus {
@@ -40,6 +45,7 @@ impl Bus {
             prg: cartridge.prg_rom,
             ppu,
             cycles: 0,
+            game: Box::from(callback),
         }
     }
 
@@ -48,8 +54,17 @@ impl Bus {
         // update cycles
         self.cycles += cycles as usize;
 
+        let nmi_before = self.ppu.nmi;
+
         // PPU ticks 3 times faster than the CPU
         self.ppu.tick(cycles * 3);
+
+        let nmi_after = self.ppu.nmi;
+
+        if !nmi_before && nmi_after {
+            // call the game callback
+            (self.game)(&self.ppu);
+        }
     }
 
     /// Function that gets the NMI status from the PPU
@@ -68,7 +83,8 @@ impl Bus {
             },
             0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
                 // write only registers
-                panic!("Write only register at address: {:#06X}", addr);
+                // panic!("Write only register at address: {:#06X}", addr);
+                0
             },
             0x2002 => {
                 // PPUSTATUS
@@ -85,6 +101,18 @@ impl Bus {
             0x2008 ..= 0x3FFF => {
                 let mirror_addr = addr & 0x2007;
                 self.read(mirror_addr)
+            },
+            0x4000 ..= 0x4015 => {
+                // APU
+                0
+            },
+            0x4016 => {
+                // JOYPAD1
+                0
+            },
+            0x4017 => {
+                // JOYPAD2
+                0
             },
             0x8000 ..= 0xFFFF => {
                 // cartridge
@@ -142,6 +170,29 @@ impl Bus {
             0x2007 => {
                 // PPUDATA
                 self.ppu.write(val);
+            },
+            0x4000..=0x4013 | 0x4015 => {
+                // APU
+            },
+            0x4016 => {
+                // JOYPAD1
+            },
+            0x4017 => {
+                // JOYPAD2
+            },
+            // https://wiki.nesdev.com/w/index.php/PPU_programmer_reference#OAM_DMA_.28.244014.29_.3E_write
+            0x4014 => {
+                let mut buffer: [u8; 256] = [0; 256];
+                let hi: u16 = (val as u16) << 8;
+                for i in 0..256u16 {
+                    buffer[i as usize] = self.read(hi + i);
+                }
+
+                self.ppu.write_oam_dma(&buffer);
+
+                // todo: handle this eventually
+                // let add_cycles: u16 = if self.cycles % 2 == 1 { 514 } else { 513 };
+                // self.tick(add_cycles); //todo this will cause weird effects as PPU will have 513/514 * 3 ticks
             },
             0x2000 ..= 0x3FFF => {
                 // ppu registers

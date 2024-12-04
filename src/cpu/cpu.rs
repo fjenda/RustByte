@@ -1,5 +1,6 @@
 // https://www.nesdev.org/obelisk-6502-guide/reference.html
 
+use std::fmt::Formatter;
 use crate::cpu::addressing::Addressing;
 use crate::flags::Status;
 use crate::byte_status::ByteStatus;
@@ -11,7 +12,7 @@ use crate::cpu::cpu_stack::CPUStack;
 use crate::cpu::interrupt::{Interrupt, NMI};
 
 /// This class represents the CPU
-pub struct CPU {
+pub struct CPU<'a> {
     /// 3x 8-bit registers A (accumulator), X, Y (indexes)
     pub a: CPURegister,
     pub x: CPURegister,
@@ -27,15 +28,15 @@ pub struct CPU {
     // pub memory: Memory,
 
     /// CPU BUS
-    pub bus: Bus,
+    pub bus: Bus<'a>,
 
     // 0x0100 - 0x01FF
     pub stack: CPUStack
 }
 
-impl CPU {
+impl<'a> CPU<'a> {
     /// Creates an instance of CPU
-    pub fn new(bus: Bus) -> Self {
+    pub fn new<'b>(bus: Bus<'b>) -> CPU<'b> {
         CPU {
             a: CPURegister::new(),
             x: CPURegister::new(),
@@ -308,11 +309,13 @@ impl CPU {
 
             // get the offset
             let offset = self.read(self.prog_counter) as i8;
-            let jump_addr = self.prog_counter.wrapping_add((1 + offset) as u16);
+            let jump_addr = self.prog_counter.wrapping_add(1).wrapping_add(offset as u16);
 
             if self.prog_counter.wrapping_add(1) & 0xFF00 != jump_addr & 0xFF00 {
                 self.bus.tick(1);
             }
+
+            self.prog_counter = jump_addr;
         }
     }
 
@@ -444,8 +447,8 @@ impl CPU {
     }
 
     fn jsr(&mut self) {
-        let address = self.read_u16(self.prog_counter);
         self.stack.push_u16(self.prog_counter + 2 - 1);
+        let address = self.read_u16(self.prog_counter);
         self.prog_counter = address;
     }
 
@@ -697,7 +700,7 @@ impl CPU {
     }
 
     fn txs(&mut self) {
-        self.stack.push(self.x.value());
+        self.stack.pointer = self.x.value();
     }
 
     fn tya(&mut self) {
@@ -734,10 +737,9 @@ impl CPU {
                 }
             };
 
-            println!(
-                "PC: {:X} OP: {:?} A: {} X: {} Y: {}",
-                self.prog_counter, ins, self.a.value(), self.x.value(), self.y.value()
-            );
+            // println!("Before PC: {:X} | {} | A: {} X: {} Y: {}", self.prog_counter, self.status, self.a.value(), self.x.value(), self.y.value());
+
+            // println!("Executing: {:?} - {:?} (0x{:X}, {} bytes)", ins.name, ins.mode, ins.address, ins.bytes);
 
             match ins.name {
                 ADC => self.adc(&ins.mode),
@@ -810,6 +812,9 @@ impl CPU {
                 // (ins.bytes - 1) because we already increased it by 1 at the beginning
                 self.prog_counter += (ins.bytes - 1) as u16;
             }
+
+            // println!("After PC: {:X} | {} | A: {} X: {} Y: {}", self.prog_counter, self.status, self.a.value(), self.x.value(), self.y.value());
+            // println!("Status: {} SP: {:X} CYC: {}", self.status, self.stack.pointer, self.bus.cycles);
 
             callback(self);
         }

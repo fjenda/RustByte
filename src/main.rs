@@ -1,84 +1,15 @@
-
-
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::EventPump;
+use rust_byte::cpu::bus::Bus;
+use rust_byte::cpu::cpu::CPU;
 use rust_byte::render::color_palette::PALETTE;
 use rust_byte::render::frame::Frame;
 use rust_byte::ppu::cartridge::Cartridge;
-
-fn show_tile(chr_rom: &Vec<u8>, bank: usize, tile_n: usize) -> Frame {
-    assert!(bank <= 1);
-
-    let mut frame = Frame::new();
-    let bank = (bank * 0x1000) as usize;
-
-    let tile = &chr_rom[(bank + tile_n * 16)..=(bank + tile_n * 16 + 15)];
-
-    for y in 0..=7 {
-        let mut upper = tile[y];
-        let mut lower = tile[y + 8];
-
-        for x in (0..=7).rev() {
-            let value = (1 & upper) << 1 | (1 & lower);
-            upper = upper >> 1;
-            lower = lower >> 1;
-            let rgb = match value {
-                0 => PALETTE[0x01],
-                1 => PALETTE[0x23],
-                2 => PALETTE[0x27],
-                3 => PALETTE[0x30],
-                _ => panic!("can't be"),
-            };
-            frame.set_pixel(x, y, rgb)
-        }
-    }
-
-    frame
-}
-
-
-fn show_tile_bank(chr_rom: &Vec<u8>, bank: usize) ->Frame {
-    assert!(bank <= 1);
-
-    let mut frame = Frame::new();
-    let mut tile_y = 0;
-    let mut tile_x = 0;
-    let bank = (bank * 0x1000) as usize;
-
-    for tile_n in 0..255 {
-        if tile_n != 0 && tile_n % 20 == 0 {
-            tile_y += 10;
-            tile_x = 0;
-        }
-        let tile = &chr_rom[(bank + tile_n * 16)..=(bank + tile_n * 16 + 15)];
-
-        for y in 0..=7 {
-            let mut upper = tile[y];
-            let mut lower = tile[y + 8];
-
-            for x in (0..=7).rev() {
-                let value = (1 & upper) << 1 | (1 & lower);
-                upper = upper >> 1;
-                lower = lower >> 1;
-                let rgb = match value {
-                    0 => PALETTE[0x01],
-                    1 => PALETTE[0x23],
-                    2 => PALETTE[0x27],
-                    3 => PALETTE[0x30],
-                    _ => panic!("can't be"),
-                };
-                frame.set_pixel(tile_x + x, tile_y + y, rgb)
-            }
-        }
-
-        tile_x += 10;
-    }
-    frame
-}
-
+use rust_byte::ppu::ppu::PPU;
+use rust_byte::render::renderer::Renderer;
 
 fn main() {
     // init sdl2
@@ -99,17 +30,20 @@ fn main() {
         .create_texture_target(PixelFormatEnum::RGB24, 256, 240)
         .unwrap();
 
-    // load the game
-    let bytes: Vec<u8> = std::fs::read("assets/Alter_Ego.nes").unwrap();
+    //load the game
+    let bytes: Vec<u8> = std::fs::read("assets/pacman.nes").unwrap();
     let rom = Cartridge::new(bytes).unwrap();
 
-    let right_bank = show_tile_bank(&rom.chr_rom, 1);
+    let mut frame = Frame::new();
 
-    texture.update(None, &right_bank.data, 256 * 3).unwrap();
-    canvas.copy(&texture, None, None).unwrap();
-    canvas.present();
+    // run the game cycle
+    let bus = Bus::new(rom, move |ppu: &PPU| {
+        Renderer::render(ppu, &mut frame);
+        texture.update(None, &frame.data, 256 * 3).unwrap();
 
-    loop {
+        canvas.copy(&texture, None, None).unwrap();
+
+        canvas.present();
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. }
@@ -120,5 +54,10 @@ fn main() {
                 _ => { /* do nothing */ }
             }
         }
-    }
+    });
+
+    let mut cpu = CPU::new(bus);
+
+    cpu.reset();
+    cpu.interpret()
 }

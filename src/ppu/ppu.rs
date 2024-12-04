@@ -18,15 +18,15 @@ pub struct PPU {
 
     /// Palette tables
     /// 32 bytes of palette data
-    palette: [u8; 32],
+    pub(crate) palette: [u8; 32],
 
     /// Visuals of the cartridge
-    chr: Vec<u8>,
+    pub(crate) chr: Vec<u8>,
 
     /// Internal memory storing sprites
     /// max. 64 sprites (4 bytes each) = 256 bytes
     /// https://www.nesdev.org/wiki/PPU_OAM
-    oam: [u8; 256],
+    pub(crate) oam: [u8; 256],
     oam_address: u8,
 
     /// Mirroring mode
@@ -34,7 +34,7 @@ pub struct PPU {
     mirroring: Mirroring,
 
     /// PPUCTRL - Controller Register ($2000)
-    controller_register: ControllerRegister,
+    pub controller_register: ControllerRegister,
 
     /// PPUMASK - Mask Register ($2001)
     mask_register: MaskRegister,
