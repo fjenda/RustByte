@@ -97,6 +97,8 @@ impl PPU {
         // one scanline -> 341 cycles
         // nmi interrupt on scanline 241
 
+        self.cycles += cycles as usize;
+
         if self.cycles >= 341 {
             self.cycles = self.cycles - 341;
             self.scanline += 1;

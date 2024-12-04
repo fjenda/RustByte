@@ -1,11 +1,11 @@
 // https://www.nesdev.org/obelisk-6502-guide/reference.html
 
-use crate::byte_status::ByteStatus;
 use crate::cpu::addressing::Addressing;
+use crate::flags::Status;
+use crate::byte_status::ByteStatus;
 use crate::cpu::bus::Bus;
 use crate::cpu::cpu_register::CPURegister;
 use crate::cpu::cpu_status::{CPUStatus};
-use crate::flags::Status;
 use crate::cpu::instructions::{Instruction, INSTRUCTION_MAP, OpName::*};
 use crate::cpu::cpu_stack::CPUStack;
 use crate::cpu::interrupt::{Interrupt, NMI};
