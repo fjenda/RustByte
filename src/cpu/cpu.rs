@@ -8,6 +8,7 @@ use crate::cpu::cpu_status::{CPUStatus};
 use crate::flags::Status;
 use crate::cpu::instructions::{Instruction, INSTRUCTION_MAP, OpName::*};
 use crate::cpu::cpu_stack::CPUStack;
+use crate::cpu::interrupt::{Interrupt, NMI};
 
 /// This class represents the CPU
 pub struct CPU {
@@ -80,6 +81,39 @@ impl CPU {
         self.prog_counter = self.read_u16(0xFFFC);
     }
 
+    /// Function that handles an interrupt
+    pub fn interrupt(&mut self, interrupt: Interrupt) {
+        // push the program counter to the stack
+        self.stack.push_u16(self.prog_counter);
+
+        // push the status register to the stack
+        let mut status = CPUStatus::new();
+        status.set_bits(self.status.value.clone());
+
+        // set the break flag
+        if interrupt.flag_mask & 0b010000 == 1 {
+            status.add(Status::Break.as_u8());
+        } else {
+            status.remove(Status::Break.as_u8());
+        }
+
+        // set the break2 flag
+        if interrupt.flag_mask & 0b100000 == 1 {
+            status.add(Status::Break2.as_u8());
+        } else {
+            status.remove(Status::Break2.as_u8());
+        }
+
+        // status.add(Status::Break.as_u8());
+        // status.add(Status::Break2.as_u8());
+
+        // push the status register to the stack
+        self.stack.push(status.value);
+
+        self.bus.tick(2);
+        self.prog_counter = self.read_u16(interrupt.address);
+    }
+
     pub fn read(&mut self, address: u16) -> u8 {
         // self.memory.read(address)
         self.bus.read(address)
@@ -115,22 +149,27 @@ impl CPU {
         }
     }
 
+    /// Function that determines if a page was crossed
+    fn crossed_page(addr_1: u16, addr_2: u16) -> bool {
+        addr_1 & 0xFF00 != addr_2 & 0xFF00
+    }
+
     // https://www.nesdev.org/obelisk-6502-guide/addressing.html
     /// Function that gets the parameter address for a function using its addressing mode
-    fn get_param_address(&mut self, mode: &Addressing) -> u16 {
+    fn get_param_address(&mut self, mode: &Addressing) -> (u16, bool) {
         match mode {
             // Immediate
-            Addressing::Immediate => self.prog_counter,
+            Addressing::Immediate => (self.prog_counter, false),
 
             // Zero Page
-            Addressing::ZeroPage => self.read(self.prog_counter) as u16,
+            Addressing::ZeroPage => (self.read(self.prog_counter) as u16, false),
             Addressing::ZeroPageX => {
                 // u8 value from memory
                 let val = self.read(self.prog_counter);
 
                 // add register x value to it (wrap around if needed)
                 let addr = val.wrapping_add(self.x.value()) as u16;
-                addr
+                (addr, false)
             },
             Addressing::ZeroPageY => {
                 // u8 value from memory
@@ -138,18 +177,18 @@ impl CPU {
 
                 // add register y value to it (wrap around if needed)
                 let addr = val.wrapping_add(self.y.value()) as u16;
-                addr
+                (addr, false)
             },
 
             // Absolute
-            Addressing::Absolute => self.read_u16(self.prog_counter),
+            Addressing::Absolute => (self.read_u16(self.prog_counter), false),
             Addressing::AbsoluteX => {
                 // u16 value from memory
                 let val = self.read_u16(self.prog_counter);
 
                 // add register x value to it (wrap around if needed)
                 let addr = val.wrapping_add(self.x.value() as u16);
-                addr
+                (addr, CPU::crossed_page(val, addr))
             },
             Addressing::AbsoluteY => {
                 // u16 value from memory
@@ -157,7 +196,7 @@ impl CPU {
 
                 // add register y value to it (wrap around if needed)
                 let addr = val.wrapping_add(self.y.value() as u16);
-                addr
+                (addr, CPU::crossed_page(val, addr))
             },
 
             // Indirect
@@ -171,7 +210,7 @@ impl CPU {
                 // high and low
                 let low = self.read(index as u16);
                 let high = self.read(index.wrapping_add(1) as u16);
-                u16::from_le_bytes([low, high])
+                (u16::from_le_bytes([low, high]), false)
             },
             Addressing::IndirectY => {
                 // u8 value from memory
@@ -183,7 +222,7 @@ impl CPU {
 
                 let tmp = u16::from_le_bytes([low, high]);
                 let addr = tmp.wrapping_add(self.y.value() as u16);
-                addr
+                (addr, CPU::crossed_page(tmp, addr))
             },
 
             // None
@@ -194,7 +233,7 @@ impl CPU {
     }
 
     fn adc(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address(mode);
         let param = self.read(address);
 
         let old_status = self.status.is_set(Status::Carry.as_u8());
@@ -214,14 +253,22 @@ impl CPU {
 
         self.a.set(res);
         self.zero_negative(res);
+
+        if cross {
+            self.bus.tick(1);
+        }
     }
 
     fn and(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address(mode);
         let param = self.read(address);
 
         self.a.set(self.a.value() & param);
         self.zero_negative(self.a.value());
+
+        if cross {
+            self.bus.tick(1);
+        }
     }
 
     fn asl_a(&mut self) {
@@ -240,7 +287,7 @@ impl CPU {
     }
 
     fn asl(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, _) = self.get_param_address(mode);
         let param = self.read(address);
 
         // set carry flag
@@ -257,9 +304,15 @@ impl CPU {
 
     fn branch(&mut self, condition: bool) {
         if condition {
+            self.bus.tick(1);
+
             // get the offset
             let offset = self.read(self.prog_counter) as i8;
-            self.prog_counter = self.prog_counter.wrapping_add((1 + offset) as u16);
+            let jump_addr = self.prog_counter.wrapping_add((1 + offset) as u16);
+
+            if self.prog_counter.wrapping_add(1) & 0xFF00 != jump_addr & 0xFF00 {
+                self.bus.tick(1);
+            }
         }
     }
 
@@ -272,7 +325,7 @@ impl CPU {
     }
 
     fn bit(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, _) = self.get_param_address(mode);
         let param = self.read(address);
 
         match self.a.value() & param {
@@ -292,7 +345,7 @@ impl CPU {
     }
 
     fn compare(&mut self, reg_val: u8, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address(mode);
         let param = self.read(address);
 
         match param <= reg_val {
@@ -301,9 +354,13 @@ impl CPU {
         }
 
         self.zero_negative(reg_val.wrapping_sub(param));
+
+        if cross {
+            self.bus.tick(1);
+        }
     }
     fn dec(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, _) = self.get_param_address(mode);
         let param = self.read(address);
 
         let res = param.wrapping_sub(1);
@@ -322,15 +379,19 @@ impl CPU {
     }
 
     fn eor(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address(mode);
         let param = self.read(address);
 
         self.a.set(self.a.value() ^ param);
         self.zero_negative(self.a.value());
+
+        if cross {
+            self.bus.tick(1);
+        }
     }
 
     fn inc(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, _) = self.get_param_address(mode);
         let param = self.read(address);
 
         let res = param.wrapping_add(1);
@@ -390,32 +451,44 @@ impl CPU {
 
     fn lda(&mut self, mode: &Addressing) {
         // get param from memory
-        let address = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address(mode);
         let param = self.read(address);
 
         // set param
         self.a.set(param);
         self.zero_negative(self.a.value());
+
+        if cross {
+            self.bus.tick(1);
+        }
     }
 
     fn ldx(&mut self, mode: &Addressing) {
         // get param from memory
-        let address = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address(mode);
         let param = self.read(address);
 
         // set param
         self.x.set(param);
         self.zero_negative(self.x.value());
+
+        if cross {
+            self.bus.tick(1);
+        }
     }
 
     fn ldy(&mut self, mode: &Addressing) {
         // get param from memory
-        let address = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address(mode);
         let param = self.read(address);
 
         // set param
         self.y.set(param);
         self.zero_negative(self.y.value());
+
+        if cross {
+            self.bus.tick(1);
+        }
     }
 
     fn lsr_a(&mut self) {
@@ -434,7 +507,7 @@ impl CPU {
     }
 
     fn lsr(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, _) = self.get_param_address(mode);
         let param = self.read(address);
 
         // set carry flag
@@ -450,11 +523,15 @@ impl CPU {
     }
 
     fn ora(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address(mode);
         let param = self.read(address);
 
         self.a.set(self.a.value() | param);
         self.zero_negative(self.a.value());
+
+        if cross {
+            self.bus.tick(1);
+        }
     }
 
     fn pha(&mut self) {
@@ -490,7 +567,7 @@ impl CPU {
     }
 
     fn rol(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, _) = self.get_param_address(mode);
         let param = self.read(address);
 
         // set carry flag
@@ -524,7 +601,7 @@ impl CPU {
     }
 
     fn ror(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, _) = self.get_param_address(mode);
         let param = self.read(address);
         let old_status = self.status.is_set(Status::Carry.as_u8());
 
@@ -558,7 +635,7 @@ impl CPU {
     }
 
     fn sbc(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address(mode);
         let param = self.read(address);
 
         let old_status = self.status.is_set(Status::Carry.as_u8());
@@ -578,20 +655,24 @@ impl CPU {
 
         self.a.set(res);
         self.zero_negative(res);
+
+        if cross {
+            self.bus.tick(1);
+        }
     }
 
     fn sta(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, _) = self.get_param_address(mode);
         self.write(address, self.a.value());
     }
 
     fn stx(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, _) = self.get_param_address(mode);
         self.write(address, self.x.value());
     }
 
     fn sty(&mut self, mode: &Addressing) {
-        let address = self.get_param_address(mode);
+        let (address, _) = self.get_param_address(mode);
         self.write(address, self.y.value());
     }
 
@@ -637,6 +718,10 @@ impl CPU {
         F: FnMut(&mut CPU)
     {
         loop {
+            if self.bus.nmi_status() {
+                self.interrupt(NMI);
+            }
+
             let ins_code = self.read(self.prog_counter);
             self.prog_counter += 1;
             let prog_counter_state = self.prog_counter;
@@ -717,6 +802,8 @@ impl CPU {
                 TXS => self.txs(),
                 TYA => self.tya(),
             }
+
+            self.bus.tick(ins.cycles);
 
             if self.prog_counter == prog_counter_state {
                 // increase prog_counter

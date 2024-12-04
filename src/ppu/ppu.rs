@@ -50,6 +50,15 @@ pub struct PPU {
 
     /// Internal buffer for reading and writing
     internal_buffer: u8,
+
+    /// Cycle counter
+    cycles: usize,
+
+    /// Scanline counter
+    scanline: u16,
+
+    /// NMI Interrupt
+    pub nmi: bool,
 }
 
 impl PPU {
@@ -68,11 +77,51 @@ impl PPU {
             scroll_register: ScrollRegister::new(),
             address_register: AddressRegister::new(),
             internal_buffer: 0,
+            cycles: 0,
+            scanline: 0,
+            nmi: false,
         }
     }
 
+    /// Create a new PPU with an empty ROM
     pub fn new_empty_rom() -> Self {
         PPU::new(vec![0; 2048], Mirroring::Horizontal)
+    }
+
+    /// Function that ticks the PPU
+    /// It ticks 3 times faster than the CPU
+    /// It's used to determine which scanline the PPU is currently rendering
+    /// https://wiki.nesdev.com/w/index.php/PPU_rendering
+    pub fn tick(&mut self, cycles: u8) -> bool {
+        // total scanlines: 262
+        // one scanline -> 341 cycles
+        // nmi interrupt on scanline 241
+
+        if self.cycles >= 341 {
+            self.cycles = self.cycles - 341;
+            self.scanline += 1;
+
+            if self.scanline == 241 {
+                // set the vblank flag
+                self.status_register.add(PPUStatus::Vblank.as_u8());
+                self.status_register.add(PPUStatus::Sprite0Hit.as_u8());
+
+                // trigger NMI
+                if self.controller_register.vblank() {
+                    self.nmi = true;
+                }
+            }
+
+            if self.scanline >= 262 {
+                self.scanline = 0;
+                self.status_register.remove(PPUStatus::Vblank.as_u8());
+                self.status_register.remove(PPUStatus::Sprite0Hit.as_u8());
+                self.nmi = false;
+                return true;
+            }
+        }
+
+        false
     }
 
     /// Handle mirroring of the PPU
@@ -226,6 +275,10 @@ impl PPU {
     pub fn write_control_register(&mut self, val: u8) {
         let before_nmi = self.controller_register.vblank();
         self.controller_register.set_bits(val);
+
+        if !before_nmi && self.controller_register.vblank() && self.status_register.is_set(PPUStatus::Vblank.as_u8()) {
+            self.nmi = true;
+        }
     }
 
     pub fn write_mask_register(&mut self, val: u8) {

@@ -1,4 +1,4 @@
-// https://www.nesdev.org/wiki/PPU_registers#PPUADDR_-_VRAM_address_($2006_write)
+// https://wwwDA.nesdev.org/wiki/PPU_registers#PPUADDR_-_VRAM_address_($2006_write)
 
 /// Class representing a PPU Address Register $2006
 #[derive(Debug)]

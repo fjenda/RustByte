@@ -13,9 +13,17 @@ use crate::ppu::ppu::PPU;
 
 #[derive(Debug)]
 pub struct Bus {
+    /// 2kB of RAM
     ram: [u8; 2048],
+
+    /// Program ROM
     prg: Vec<u8>,
+
+    /// PPU
     ppu: PPU,
+
+    /// Number of cycles
+    cycles: usize,
 }
 
 /// Implementation of the Bus.
@@ -31,7 +39,22 @@ impl Bus {
             ram: [0; 2048],
             prg: cartridge.prg_rom,
             ppu,
+            cycles: 0,
         }
+    }
+
+    /// Function that ticks the bus, updating the number of cycles and the PPU
+    pub fn tick(&mut self, cycles: u8) {
+        // update cycles
+        self.cycles += cycles as usize;
+
+        // PPU ticks 3 times faster than the CPU
+        self.ppu.tick(cycles * 3);
+    }
+
+    /// Function that gets the NMI status from the PPU
+    pub fn nmi_status(&mut self) -> bool {
+        self.ppu.nmi
     }
 
     /// Function that returns a value read from the memory at a given address
@@ -48,15 +71,15 @@ impl Bus {
                 panic!("Write only register at address: {:#06X}", addr);
             },
             0x2002 => {
-                // ppu status register
+                // PPUSTATUS
                 self.ppu.read_status_register()
             },
             0x2004 => {
-                // ppu oam data register
+                // PPUOAMDATA
                 self.ppu.read_oam_data()
             }
             0x2007 => {
-                // ppu data register
+                // PPUDATA
                 self.ppu.read()
             },
             0x2008 ..= 0x3FFF => {
@@ -113,11 +136,11 @@ impl Bus {
                 self.ppu.write_scroll_register(val);
             },
             0x2006 => {
-                // ppu address register
+                // PPUADDR
                 self.ppu.write_address_register(val);
             },
             0x2007 => {
-                // ppu data register
+                // PPUDATA
                 self.ppu.write(val);
             },
             0x2000 ..= 0x3FFF => {
