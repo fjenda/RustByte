@@ -74,7 +74,7 @@ impl<'a> Bus<'a> {
 
     /// Function that gets the NMI status from the PPU
     pub fn nmi_status(&mut self) -> bool {
-        self.ppu.nmi
+        self.ppu.nmi()
     }
 
     /// Function that returns a value read from the memory at a given address

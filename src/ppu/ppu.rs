@@ -58,7 +58,7 @@ pub struct PPU {
     scanline: u16,
 
     /// NMI Interrupt
-    pub nmi: bool,
+    nmi: bool,
 }
 
 impl PPU {
@@ -296,6 +296,15 @@ impl PPU {
 
     pub fn write_address_register(&mut self, val: u8) {
         self.address_register.set(val);
+    }
+
+    pub fn nmi(&mut self) -> bool {
+        if self.nmi {
+            self.nmi = false;
+            true
+        } else {
+            false
+        }
     }
 }
 

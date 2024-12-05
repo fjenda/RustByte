@@ -96,17 +96,10 @@ fn main() {
         .unwrap();
 
     // load the game
-    let bytes: Vec<u8> = std::fs::read("assets/pacman.nes").unwrap();
+    let bytes: Vec<u8> = std::fs::read("assets/nestest.nes").unwrap();
     let rom = Cartridge::new(bytes).unwrap();
 
     let mut frame = Frame::new();
-
-    // let bus = Bus::new(rom, |_| {});
-    // let mut cpu = CPU::new(bus);
-    // cpu.reset();
-    // cpu.interpret_callback(|cpu| {
-    //     // println!("{}", trace(cpu));
-    // });
 
     let bus = Bus::new(rom, move |ppu: &PPU| {
         Renderer::render(ppu, &mut frame);
@@ -129,23 +122,4 @@ fn main() {
     let mut cpu = CPU::new(bus);
     cpu.reset();
     cpu.interpret();
-
-    // let right_bank = show_tile_bank(&rom.chr_rom, 1);
-    //
-    // texture.update(None, &right_bank.data, 256 * 3).unwrap();
-    // canvas.copy(&texture, None, None).unwrap();
-    // canvas.present();
-    //
-    // loop {
-    //     for event in event_pump.poll_iter() {
-    //         match event {
-    //             Event::Quit { .. }
-    //             | Event::KeyDown {
-    //                 keycode: Some(Keycode::Escape),
-    //                 ..
-    //             } => std::process::exit(0),
-    //             _ => { /* do nothing */ }
-    //         }
-    //     }
-    // }
 }
