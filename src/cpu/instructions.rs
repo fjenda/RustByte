@@ -1,6 +1,7 @@
 // https://www.nesdev.org/obelisk-6502-guide/reference.html
 
 use std::collections::HashMap;
+use std::fmt::{format, Display, Formatter};
 use lazy_static::lazy_static;
 use crate::cpu::addressing::Addressing;
 
@@ -298,4 +299,12 @@ pub enum OpName {
     TXA,
     TXS,
     TYA,
+}
+
+impl Display for OpName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let name = format!("{:?}", self);
+        let first = name.split('_').next().unwrap_or(&name);
+        write!(f, "{}", first)
+    }
 }

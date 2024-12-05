@@ -25,7 +25,7 @@ impl Renderer {
                 let mut lower = tile[y + 8];
 
                 for x in (0 ..= 7).rev() {
-                    let value = (1 & lower) << 1 | (1 & upper);
+                    let value = (1 & upper) << 1 | (1 & lower);
                     upper = upper >> 1;
                     lower = lower >> 1;
                     let rgb = match value {
@@ -33,6 +33,10 @@ impl Renderer {
                         1 => PALETTE[palette[1] as usize],
                         2 => PALETTE[palette[2] as usize],
                         3 => PALETTE[palette[3] as usize],
+                        // 0 => PALETTE[0x01],
+                        // 1 => PALETTE[0x23],
+                        // 2 => PALETTE[0x27],
+                        // 3 => PALETTE[0x30],
                         _ => panic!("can't be"),
                     };
                     frame.set_pixel(tile_column * 8 + x, tile_row * 8 + y, rgb)

@@ -46,13 +46,13 @@ impl CPUStack {
         self.push(bytes[0]);
     }
 
-    /// Peek at the top of the stack
-    pub fn peek(&self) -> u8 {
-        self.stack[self.pointer as usize]
-    }
+    // /// Peek at the top of the stack
+    // pub fn peek(&self) -> u8 {
+    //     self.stack[self.pointer as usize]
+    // }
 
     /// Reset the stack pointer
     pub fn reset(&mut self) {
-        self.pointer = 0xfd;
+        self.pointer = 0xFD;
     }
 }

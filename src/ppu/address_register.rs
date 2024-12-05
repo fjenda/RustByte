@@ -67,12 +67,9 @@ impl AddressRegister {
             self.value.0 = self.value.0.wrapping_add(1);
         }
 
-        // get the current full value once to avoid repeated calls to `get()`
-        let new_value = self.get();
-
         // check if the address needs to be mirrored down
-        if new_value > 0x3FFF {
-            self.internal_set(new_value & 0x3FFF);
+        if self.get() > 0x3FFF {
+            self.internal_set(self.get() & 0x3FFF);
         }
     }
 }

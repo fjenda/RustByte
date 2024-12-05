@@ -1,6 +1,7 @@
 // https://www.nesdev.org/obelisk-6502-guide/reference.html
 
 use std::fmt::Formatter;
+use sdl2::log::log;
 use crate::cpu::addressing::Addressing;
 use crate::flags::Status;
 use crate::byte_status::ByteStatus;
@@ -31,7 +32,8 @@ pub struct CPU<'a> {
     pub bus: Bus<'a>,
 
     // 0x0100 - 0x01FF
-    pub stack: CPUStack
+    // pub stack: CPUStack
+    pub stack_pointer: u8,
 }
 
 impl<'a> CPU<'a> {
@@ -45,7 +47,8 @@ impl<'a> CPU<'a> {
             prog_counter: 0,
             // memory: Memory::new(),
             bus,
-            stack: CPUStack::new(),
+            // stack: CPUStack::new(),
+            stack_pointer: 0xFD,
         }
     }
 
@@ -76,7 +79,7 @@ impl<'a> CPU<'a> {
         self.status.reset();
 
         // reset the stack
-        self.stack.reset();
+        self.stack_pointer = 0xFD;
 
         // set prog_counter to address at 0xFFFC
         self.prog_counter = self.read_u16(0xFFFC);
@@ -85,33 +88,20 @@ impl<'a> CPU<'a> {
     /// Function that handles an interrupt
     pub fn interrupt(&mut self, interrupt: Interrupt) {
         // push the program counter to the stack
-        self.stack.push_u16(self.prog_counter);
+        self.stack_push_u16(self.prog_counter);
+
+        let mut status = self.status.clone();
+
+        // set the break flags
+        status.set(Status::Break.as_u8(), interrupt.flag_mask & 0b010000 == 1);
+        status.set(Status::Break2.as_u8(), interrupt.flag_mask & 0b100000 == 1);
+
 
         // push the status register to the stack
-        let mut status = CPUStatus::new();
-        status.set_bits(self.status.value.clone());
+        self.stack_push(status.value);
+        self.status.add(Status::InterruptDisable.as_u8());
 
-        // set the break flag
-        if interrupt.flag_mask & 0b010000 == 1 {
-            status.add(Status::Break.as_u8());
-        } else {
-            status.remove(Status::Break.as_u8());
-        }
-
-        // set the break2 flag
-        if interrupt.flag_mask & 0b100000 == 1 {
-            status.add(Status::Break2.as_u8());
-        } else {
-            status.remove(Status::Break2.as_u8());
-        }
-
-        // status.add(Status::Break.as_u8());
-        // status.add(Status::Break2.as_u8());
-
-        // push the status register to the stack
-        self.stack.push(status.value);
-
-        self.bus.tick(2);
+        self.bus.tick(interrupt.cycles);
         self.prog_counter = self.read_u16(interrupt.address);
     }
 
@@ -157,16 +147,13 @@ impl<'a> CPU<'a> {
 
     // https://www.nesdev.org/obelisk-6502-guide/addressing.html
     /// Function that gets the parameter address for a function using its addressing mode
-    fn get_param_address(&mut self, mode: &Addressing) -> (u16, bool) {
+    pub fn get_param_address(&mut self, mode: &Addressing, addr: u16) -> (u16, bool) {
         match mode {
-            // Immediate
-            Addressing::Immediate => (self.prog_counter, false),
-
             // Zero Page
-            Addressing::ZeroPage => (self.read(self.prog_counter) as u16, false),
+            Addressing::ZeroPage => (self.read(addr) as u16, false),
             Addressing::ZeroPageX => {
                 // u8 value from memory
-                let val = self.read(self.prog_counter);
+                let val = self.read(addr);
 
                 // add register x value to it (wrap around if needed)
                 let addr = val.wrapping_add(self.x.value()) as u16;
@@ -174,7 +161,7 @@ impl<'a> CPU<'a> {
             },
             Addressing::ZeroPageY => {
                 // u8 value from memory
-                let val = self.read(self.prog_counter);
+                let val = self.read(addr);
 
                 // add register y value to it (wrap around if needed)
                 let addr = val.wrapping_add(self.y.value()) as u16;
@@ -182,10 +169,10 @@ impl<'a> CPU<'a> {
             },
 
             // Absolute
-            Addressing::Absolute => (self.read_u16(self.prog_counter), false),
+            Addressing::Absolute => (self.read_u16(addr), false),
             Addressing::AbsoluteX => {
                 // u16 value from memory
-                let val = self.read_u16(self.prog_counter);
+                let val = self.read_u16(addr);
 
                 // add register x value to it (wrap around if needed)
                 let addr = val.wrapping_add(self.x.value() as u16);
@@ -193,7 +180,7 @@ impl<'a> CPU<'a> {
             },
             Addressing::AbsoluteY => {
                 // u16 value from memory
-                let val = self.read_u16(self.prog_counter);
+                let val = self.read_u16(addr);
 
                 // add register y value to it (wrap around if needed)
                 let addr = val.wrapping_add(self.y.value() as u16);
@@ -203,7 +190,7 @@ impl<'a> CPU<'a> {
             // Indirect
             Addressing::IndirectX => {
                 // u8 value from memory
-                let val = self.read(self.prog_counter);
+                let val = self.read(addr);
 
                 // index into the memory
                 let index: u8 = val.wrapping_add(self.x.value());
@@ -215,7 +202,7 @@ impl<'a> CPU<'a> {
             },
             Addressing::IndirectY => {
                 // u8 value from memory
-                let val = self.read(self.prog_counter);
+                let val = self.read(addr);
 
                 // high and low
                 let low = self.read(val as u16);
@@ -227,33 +214,46 @@ impl<'a> CPU<'a> {
             },
 
             // None
-            Addressing::None => {
+            _ => {
                 panic!("mode {:?} not supported", mode);
             }
         }
     }
 
-    fn adc(&mut self, mode: &Addressing) {
-        let (address, cross) = self.get_param_address(mode);
-        let param = self.read(address);
+    fn get_param_address_internal(&mut self, mode: &Addressing) -> (u16, bool) {
+        match mode {
+            Addressing::Immediate => (self.prog_counter, false),
+            _ => self.get_param_address(&mode, self.prog_counter),
+        }
+    }
 
-        let old_status = self.status.is_set(Status::Carry.as_u8());
-        let res = self.a.value().wrapping_add(param).wrapping_add(old_status as u8);
+    fn add_to_a(&mut self, val: u8) {
+        let res = self.a.value() as u16 + val as u16 + self.status.is_set(Status::Carry.as_u8()) as u16;
+        let carry = res > 0xFF;
 
         // set carry flag
-        match res < self.a.value() {
+        match carry {
             true => self.status.add(Status::Carry.as_u8()),
             false => self.status.remove(Status::Carry.as_u8()),
         }
 
+        let res = res as u8;
+
         // set overflow flag
-        match (self.a.value() ^ res) & (param ^ res) & 0x80 {
-            0 => self.status.remove(Status::Overflow.as_u8()),
-            _ => self.status.add(Status::Overflow.as_u8()),
+        match (val ^ res) & (res ^ self.a.value()) & 0x80 != 0 {
+            true => self.status.add(Status::Overflow.as_u8()),
+            false => self.status.remove(Status::Overflow.as_u8()),
         }
 
         self.a.set(res);
         self.zero_negative(res);
+    }
+
+    fn adc(&mut self, mode: &Addressing) {
+        let (address, cross) = self.get_param_address_internal(mode);
+        let param = self.read(address);
+
+        self.add_to_a(param);
 
         if cross {
             self.bus.tick(1);
@@ -261,10 +261,10 @@ impl<'a> CPU<'a> {
     }
 
     fn and(&mut self, mode: &Addressing) {
-        let (address, cross) = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address_internal(mode);
         let param = self.read(address);
 
-        self.a.set(self.a.value() & param);
+        self.a.set(param & self.a.value());
         self.zero_negative(self.a.value());
 
         if cross {
@@ -276,9 +276,9 @@ impl<'a> CPU<'a> {
         let param = self.a.value();
 
         // set carry flag
-        match param & 0x80 {
-            0 => self.status.remove(Status::Carry.as_u8()),
-            _ => self.status.add(Status::Carry.as_u8()),
+        match param >> 7 {
+            1 => self.status.add(Status::Carry.as_u8()),
+            _ => self.status.remove(Status::Carry.as_u8()),
         }
 
         // shift left
@@ -287,20 +287,21 @@ impl<'a> CPU<'a> {
         self.zero_negative(res);
     }
 
-    fn asl(&mut self, mode: &Addressing) {
-        let (address, _) = self.get_param_address(mode);
+    fn asl(&mut self, mode: &Addressing) -> u8 {
+        let (address, _) = self.get_param_address_internal(mode);
         let param = self.read(address);
 
         // set carry flag
-        match param & 0x80 {
-            0 => self.status.remove(Status::Carry.as_u8()),
-            _ => self.status.add(Status::Carry.as_u8()),
+        match param >> 7 {
+            1 => self.status.add(Status::Carry.as_u8()),
+            _ => self.status.remove(Status::Carry.as_u8()),
         }
 
         // shift left
         let res = param << 1;
         self.write(address, res);
         self.zero_negative(res);
+        param
     }
 
     fn branch(&mut self, condition: bool) {
@@ -328,7 +329,7 @@ impl<'a> CPU<'a> {
     }
 
     fn bit(&mut self, mode: &Addressing) {
-        let (address, _) = self.get_param_address(mode);
+        let (address, _) = self.get_param_address_internal(mode);
         let param = self.read(address);
 
         match self.a.value() & param {
@@ -336,19 +337,12 @@ impl<'a> CPU<'a> {
             _ => self.status.remove(Status::Zero.as_u8()),
         }
 
-        match param & Status::Negative.as_u8() {
-            0 => self.status.remove(Status::Negative.as_u8()),
-            _ => self.status.add(Status::Negative.as_u8()),
-        }
-
-        match param & Status::Overflow.as_u8() {
-            0 => self.status.remove(Status::Overflow.as_u8()),
-            _ => self.status.add(Status::Overflow.as_u8()),
-        }
+        self.status.set(Status::Negative.as_u8(), param & Status::Negative.as_u8() > 0);
+        self.status.set(Status::Overflow.as_u8(), param & Status::Overflow.as_u8() > 0);
     }
 
     fn compare(&mut self, reg_val: u8, mode: &Addressing) {
-        let (address, cross) = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address_internal(mode);
         let param = self.read(address);
 
         match param <= reg_val {
@@ -362,13 +356,14 @@ impl<'a> CPU<'a> {
             self.bus.tick(1);
         }
     }
-    fn dec(&mut self, mode: &Addressing) {
-        let (address, _) = self.get_param_address(mode);
-        let param = self.read(address);
+    fn dec(&mut self, mode: &Addressing) -> u8 {
+        let (address, _) = self.get_param_address_internal(mode);
+        let mut param = self.read(address);
 
-        let res = param.wrapping_sub(1);
-        self.write(address, res);
-        self.zero_negative(res);
+        param = param.wrapping_sub(1);
+        self.write(address, param);
+        self.zero_negative(param);
+        param
     }
 
     fn dex(&mut self) {
@@ -382,10 +377,10 @@ impl<'a> CPU<'a> {
     }
 
     fn eor(&mut self, mode: &Addressing) {
-        let (address, cross) = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address_internal(mode);
         let param = self.read(address);
 
-        self.a.set(self.a.value() ^ param);
+        self.a.set(param ^ self.a.value());
         self.zero_negative(self.a.value());
 
         if cross {
@@ -393,13 +388,14 @@ impl<'a> CPU<'a> {
         }
     }
 
-    fn inc(&mut self, mode: &Addressing) {
-        let (address, _) = self.get_param_address(mode);
-        let param = self.read(address);
+    fn inc(&mut self, mode: &Addressing) -> u8 {
+        let (address, _) = self.get_param_address_internal(mode);
+        let mut param = self.read(address);
 
-        let res = param.wrapping_add(1);
-        self.write(address, res);
-        self.zero_negative(res);
+        param = param.wrapping_add(1);
+        self.write(address, param);
+        self.zero_negative(param);
+        param
     }
 
     fn inx(&mut self) {
@@ -447,15 +443,17 @@ impl<'a> CPU<'a> {
     }
 
     fn jsr(&mut self) {
-        self.stack.push_u16(self.prog_counter + 2 - 1);
+        self.stack_push_u16(self.prog_counter + 2 - 1);
         let address = self.read_u16(self.prog_counter);
         self.prog_counter = address;
     }
 
     fn lda(&mut self, mode: &Addressing) {
         // get param from memory
-        let (address, cross) = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address_internal(mode);
         let param = self.read(address);
+
+        // log(format!("LDA - Address: 0x{:X} | Value: 0x{:X} ({:?}", address, param, mode).as_str());
 
         // set param
         self.a.set(param);
@@ -468,7 +466,7 @@ impl<'a> CPU<'a> {
 
     fn ldx(&mut self, mode: &Addressing) {
         // get param from memory
-        let (address, cross) = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address_internal(mode);
         let param = self.read(address);
 
         // set param
@@ -482,7 +480,7 @@ impl<'a> CPU<'a> {
 
     fn ldy(&mut self, mode: &Addressing) {
         // get param from memory
-        let (address, cross) = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address_internal(mode);
         let param = self.read(address);
 
         // set param
@@ -498,9 +496,9 @@ impl<'a> CPU<'a> {
         let param = self.a.value();
 
         // set carry flag
-        match param & 0x01 {
-            0 => self.status.remove(Status::Carry.as_u8()),
-            _ => self.status.add(Status::Carry.as_u8()),
+        match param & 1 {
+            1 => self.status.add(Status::Carry.as_u8()),
+            _ => self.status.remove(Status::Carry.as_u8()),
         }
 
         // shift right
@@ -510,13 +508,13 @@ impl<'a> CPU<'a> {
     }
 
     fn lsr(&mut self, mode: &Addressing) {
-        let (address, _) = self.get_param_address(mode);
+        let (address, _) = self.get_param_address_internal(mode);
         let param = self.read(address);
 
         // set carry flag
-        match param & 0x01 {
-            0 => self.status.remove(Status::Carry.as_u8()),
-            _ => self.status.add(Status::Carry.as_u8()),
+        match param & 1 {
+            1 => self.status.add(Status::Carry.as_u8()),
+            _ => self.status.remove(Status::Carry.as_u8()),
         }
 
         // shift right
@@ -526,10 +524,10 @@ impl<'a> CPU<'a> {
     }
 
     fn ora(&mut self, mode: &Addressing) {
-        let (address, cross) = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address_internal(mode);
         let param = self.read(address);
 
-        self.a.set(self.a.value() | param);
+        self.a.set(param | self.a.value());
         self.zero_negative(self.a.value());
 
         if cross {
@@ -538,126 +536,130 @@ impl<'a> CPU<'a> {
     }
 
     fn pha(&mut self) {
-        self.stack.push(self.a.value());
+        self.stack_push(self.a.value());
     }
 
     fn php(&mut self) {
-        self.stack.push(self.status.value.clone());
+        let mut flags = self.status.clone();
+        flags.add(Status::Break.as_u8());
+        flags.add(Status::Break2.as_u8());
+        self.stack_push(flags.value);
     }
 
     fn pla(&mut self) {
-        self.a.set(self.stack.pop());
+        let data = self.stack_pop();
+        self.a.set(data);
         self.zero_negative(self.a.value());
     }
 
     fn plp(&mut self) {
-        self.status.set_bits(self.stack.pop());
+        let val = self.stack_pop();
+        self.status.set_bits(val);
+        self.status.remove(Status::Break.as_u8());
+        self.status.add(Status::Break2.as_u8());
     }
 
     fn rol_a(&mut self) {
-        let param = self.a.value();
+        let mut param = self.a.value();
+        let old_carry = self.status.is_set(Status::Carry.as_u8());
 
         // set carry flag
-        match param & 0x80 {
-            0 => self.status.remove(Status::Carry.as_u8()),
-            _ => self.status.add(Status::Carry.as_u8()),
+        match param >> 7 {
+            1 => self.status.add(Status::Carry.as_u8()),
+            _ => self.status.remove(Status::Carry.as_u8()),
         }
 
         // shift left
-        let res = param << 1;
-        self.a.set(res);
-        self.zero_negative(res);
+        param = param << 1;
+        if old_carry {
+            param = param | 1;
+        }
+
+        self.a.set(param);
+        self.zero_negative(param);
     }
 
-    fn rol(&mut self, mode: &Addressing) {
-        let (address, _) = self.get_param_address(mode);
-        let param = self.read(address);
+    fn rol(&mut self, mode: &Addressing) -> u8 {
+        let (address, _) = self.get_param_address_internal(mode);
+        let mut param = self.read(address);
+        let old_carry = self.status.is_set(Status::Carry.as_u8());
 
         // set carry flag
-        match param & 0x80 {
-            0 => self.status.remove(Status::Carry.as_u8()),
-            _ => self.status.add(Status::Carry.as_u8()),
+        match param >> 7 {
+            1 => self.status.add(Status::Carry.as_u8()),
+            _ => self.status.remove(Status::Carry.as_u8()),
         }
 
         // shift left
-        let res = param << 1;
-        self.write(address, res);
-        self.zero_negative(res);
+        param = param << 1;
+        if old_carry {
+            param = param | 1;
+        }
+
+        self.write(address, param);
+        self.zero_negative(param);
+        param
     }
 
     fn ror_a(&mut self) {
-        let param = self.a.value();
-        let old_status = self.status.is_set(Status::Carry.as_u8());
+        let mut param = self.a.value();
+        let old_carry = self.status.is_set(Status::Carry.as_u8());
 
         // set carry flag
-        match param & 0x01 {
-            0 => self.status.remove(Status::Carry.as_u8()),
-            _ => self.status.add(Status::Carry.as_u8()),
+        match param & 1 {
+            1 => self.status.add(Status::Carry.as_u8()),
+            _ => self.status.remove(Status::Carry.as_u8()),
         }
 
         // shift right
-        let mut res = param >> 1;
-        if old_status {
-            res |= 0x80;
+        param = param >> 1;
+        if old_carry {
+            param = param | 0x80;
         }
-        self.a.set(res);
+
+        self.a.set(param);
+        self.zero_negative(param);
     }
 
-    fn ror(&mut self, mode: &Addressing) {
-        let (address, _) = self.get_param_address(mode);
-        let param = self.read(address);
-        let old_status = self.status.is_set(Status::Carry.as_u8());
+    fn ror(&mut self, mode: &Addressing) -> u8 {
+        let (address, _) = self.get_param_address_internal(mode);
+        let mut param = self.read(address);
+        let old_carry = self.status.is_set(Status::Carry.as_u8());
 
         // set carry flag
-        match param & 0x01 {
-            0 => self.status.remove(Status::Carry.as_u8()),
-            _ => self.status.add(Status::Carry.as_u8()),
+        match param & 1 {
+            1 => self.status.add(Status::Carry.as_u8()),
+            _ => self.status.remove(Status::Carry.as_u8()),
         }
 
         // shift right
-        let mut res = param >> 1;
-        if old_status {
-            res |= 0x80;
+        param = param >> 1;
+        if old_carry {
+            param = param | 0x80;
         }
-        self.write(address, res);
 
-        match res >> 7 {
-            1 => self.status.add(Status::Negative.as_u8()),
-            _ => self.status.remove(Status::Negative.as_u8()),
-        }
+        self.write(address, param);
+        self.zero_negative(param);
+        param
     }
 
     fn rti(&mut self) {
-        self.status.set_bits(self.stack.pop());
-        self.prog_counter = self.stack.pop_u16();
+        let val = self.stack_pop();
+        self.status.set_bits(val);
+        self.status.remove(Status::Break.as_u8());
+        self.status.add(Status::Break2.as_u8());
 
+        self.prog_counter = self.stack_pop_u16();
     }
 
     fn rts(&mut self) {
-        self.prog_counter = self.stack.pop_u16() + 1;
+        self.prog_counter = self.stack_pop_u16() + 1;
     }
 
     fn sbc(&mut self, mode: &Addressing) {
-        let (address, cross) = self.get_param_address(mode);
+        let (address, cross) = self.get_param_address_internal(mode);
         let param = self.read(address);
-
-        let old_status = self.status.is_set(Status::Carry.as_u8());
-        let res = self.a.value().wrapping_sub(param).wrapping_sub(!old_status as u8);
-
-        // Set carry flag (no borrow occurred)
-        match self.a.value() >= param + (!old_status as u8) {
-            true => self.status.add(Status::Carry.as_u8()),
-            false => self.status.remove(Status::Carry.as_u8()),
-        }
-
-        // Set overflow flag
-        match (self.a.value() ^ res) & (param ^ res) & 0x80 {
-            0 => self.status.remove(Status::Overflow.as_u8()),
-            _ => self.status.add(Status::Overflow.as_u8()),
-        }
-
-        self.a.set(res);
-        self.zero_negative(res);
+        self.add_to_a((param as i8).wrapping_neg().wrapping_sub(1) as u8);
 
         if cross {
             self.bus.tick(1);
@@ -665,17 +667,17 @@ impl<'a> CPU<'a> {
     }
 
     fn sta(&mut self, mode: &Addressing) {
-        let (address, _) = self.get_param_address(mode);
+        let (address, _) = self.get_param_address_internal(mode);
         self.write(address, self.a.value());
     }
 
     fn stx(&mut self, mode: &Addressing) {
-        let (address, _) = self.get_param_address(mode);
+        let (address, _) = self.get_param_address_internal(mode);
         self.write(address, self.x.value());
     }
 
     fn sty(&mut self, mode: &Addressing) {
-        let (address, _) = self.get_param_address(mode);
+        let (address, _) = self.get_param_address_internal(mode);
         self.write(address, self.y.value());
     }
 
@@ -689,8 +691,10 @@ impl<'a> CPU<'a> {
         self.zero_negative(self.y.value());
     }
 
+
+    // TODO: check if this is correct
     fn tsx(&mut self) {
-        self.x.set(self.stack.peek());
+        self.x.set(self.stack_pointer);
         self.zero_negative(self.x.value());
     }
 
@@ -700,15 +704,13 @@ impl<'a> CPU<'a> {
     }
 
     fn txs(&mut self) {
-        self.stack.pointer = self.x.value();
+        self.stack_pointer = self.x.value();
     }
 
     fn tya(&mut self) {
         self.a.set(self.y.value());
         self.zero_negative(self.a.value());
     }
-
-
 
     /// Function that interprets the given program
     pub fn interpret(&mut self) {
@@ -724,6 +726,8 @@ impl<'a> CPU<'a> {
             if self.bus.nmi_status() {
                 self.interrupt(NMI);
             }
+
+            callback(self);
 
             let ins_code = self.read(self.prog_counter);
             self.prog_counter += 1;
@@ -745,7 +749,7 @@ impl<'a> CPU<'a> {
                 ADC => self.adc(&ins.mode),
                 AND => self.and(&ins.mode),
                 ASL_A => self.asl_a(),
-                ASL => self.asl(&ins.mode),
+                ASL => { self.asl(&ins.mode); },
                 BIT => self.bit(&ins.mode),
                 BCS => self.branch(self.status.is_set(Status::Carry.as_u8())),
                 BCC => self.branch(!self.status.is_set(Status::Carry.as_u8())),
@@ -763,11 +767,11 @@ impl<'a> CPU<'a> {
                 CMP => self.compare(self.a.value(), &ins.mode),
                 CPX => self.compare(self.x.value(), &ins.mode),
                 CPY => self.compare(self.y.value(), &ins.mode),
-                DEC => self.dec(&ins.mode),
+                DEC => { self.dec(&ins.mode); },
                 DEX => self.dex(),
                 DEY => self.dey(),
                 EOR => self.eor(&ins.mode),
-                INC => self.inc(&ins.mode),
+                INC => { self.inc(&ins.mode); },
                 INX => self.inx(),
                 INY => self.iny(),
                 JMP_ABS => self.jmp_abs(),
@@ -785,9 +789,9 @@ impl<'a> CPU<'a> {
                 PLA => self.pla(),
                 PLP => self.plp(),
                 ROL_A => self.rol_a(),
-                ROL => self.rol(&ins.mode),
+                ROL => { self.rol(&ins.mode); },
                 ROR_A => self.ror_a(),
-                ROR => self.ror(&ins.mode),
+                ROR => { self.ror(&ins.mode); },
                 RTI => self.rti(),
                 RTS => self.rts(),
                 SBC => self.sbc(&ins.mode),
@@ -815,8 +819,27 @@ impl<'a> CPU<'a> {
 
             // println!("After PC: {:X} | {} | A: {} X: {} Y: {}", self.prog_counter, self.status, self.a.value(), self.x.value(), self.y.value());
             // println!("Status: {} SP: {:X} CYC: {}", self.status, self.stack.pointer, self.bus.cycles);
-
-            callback(self);
         }
+    }
+
+    pub fn stack_push(&mut self, val: u8) {
+        self.write(0x100 + self.stack_pointer as u16, val);
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
+    }
+
+    pub fn stack_pop(&mut self) -> u8 {
+        self.stack_pointer = self.stack_pointer.wrapping_add(1);
+        self.read(0x100 + self.stack_pointer as u16)
+    }
+
+    pub fn stack_push_u16(&mut self, val: u16) {
+        self.stack_push((val >> 8) as u8);
+        self.stack_push(val as u8);
+    }
+
+    pub fn stack_pop_u16(&mut self) -> u16 {
+        let low = self.stack_pop() as u16;
+        let high = self.stack_pop() as u16;
+        (high << 8) | low
     }
 }

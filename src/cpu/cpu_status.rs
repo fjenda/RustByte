@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use crate::byte_status::ByteStatus;
 
 /// Class representing a CPU Status
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CPUStatus {
     pub value: u8,
 }
@@ -13,7 +13,15 @@ impl CPUStatus {
     /// Create a new CPU Status
     pub fn new() -> Self {
         CPUStatus {
-            value: 0b0010_0000,
+            value: 0b0010_0100,
+        }
+    }
+
+    pub fn set(&mut self, flag: u8, cond: bool) {
+        if cond {
+            self.add(flag);
+        } else {
+            self.remove(flag);
         }
     }
 }
@@ -37,7 +45,7 @@ impl ByteStatus for CPUStatus {
 
     /// Function that resets the status to 0
     fn reset(&mut self) {
-        self.value = 0;
+        self.value = 0b0010_0100;
     }
 
     /// Function that sets the status to a specific value

@@ -35,10 +35,10 @@ impl ControllerRegister {
     }
 
     pub fn background_pattern_table(&self) -> u16 {
-        if self.is_set(Settings::Background.as_u8()) {
-            0x1000
-        } else {
+        if !self.is_set(Settings::Background.as_u8()) {
             0
+        } else {
+            0x1000
         }
     }
 

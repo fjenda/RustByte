@@ -22,7 +22,7 @@ pub struct Bus<'callback> {
     ppu: PPU,
 
     /// Number of cycles
-    pub(crate) cycles: usize,
+    pub cycles: usize,
 
     /// Game callback
     game: Box<dyn FnMut(&PPU) + 'callback>
@@ -48,6 +48,18 @@ impl<'a> Bus<'a> {
             game: Box::from(callback),
         }
     }
+    //
+    // pub fn new<'callback>(cartridge: Cartridge) -> Bus<'callback> {
+    //     let ppu = PPU::new(cartridge.chr_rom, cartridge.mirroring);
+    //
+    //     Bus {
+    //         ram: [0; 2048],
+    //         prg: cartridge.prg_rom,
+    //         ppu,
+    //         cycles: 0,
+    //         game: Box::from(|_ppu: &PPU| {}),
+    //     }
+    // }
 
     /// Function that ticks the bus, updating the number of cycles and the PPU
     pub fn tick(&mut self, cycles: u8) {
@@ -98,10 +110,6 @@ impl<'a> Bus<'a> {
                 // PPUDATA
                 self.ppu.read()
             },
-            0x2008 ..= 0x3FFF => {
-                let mirror_addr = addr & 0x2007;
-                self.read(mirror_addr)
-            },
             0x4000 ..= 0x4015 => {
                 // APU
                 0
@@ -113,6 +121,10 @@ impl<'a> Bus<'a> {
             0x4017 => {
                 // JOYPAD2
                 0
+            },
+            0x2008 ..= 0x3FFF => {
+                let mirror_addr = addr & 0x2007;
+                self.read(mirror_addr)
             },
             0x8000 ..= 0xFFFF => {
                 // cartridge
@@ -129,9 +141,12 @@ impl<'a> Bus<'a> {
     /// Function that returns a u16 value read from the memory at a given address
     /// CPU uses Little-Endian addressing
     pub fn read_u16(&mut self, addr: u16) -> u16 {
-        let low = self.read(addr);
-        let high = self.read(addr + 1);
-        u16::from_le_bytes([low, high])
+        // let low = self.read(addr);
+        // let high = self.read(addr + 1);
+        // u16::from_le_bytes([low, high])
+        let lo = self.read(addr) as u16;
+        let hi = self.read(addr + 1) as u16;
+        (hi << 8) | (lo as u16)
     }
 
     /// Function that writes a value into the memory at a given address
@@ -194,7 +209,7 @@ impl<'a> Bus<'a> {
                 // let add_cycles: u16 = if self.cycles % 2 == 1 { 514 } else { 513 };
                 // self.tick(add_cycles); //todo this will cause weird effects as PPU will have 513/514 * 3 ticks
             },
-            0x2000 ..= 0x3FFF => {
+            0x2008 ..= 0x3FFF => {
                 // ppu registers
                 let mirror_addr = addr & 0x2007;
                 self.write(mirror_addr, val);

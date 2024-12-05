@@ -18,15 +18,15 @@ pub struct PPU {
 
     /// Palette tables
     /// 32 bytes of palette data
-    pub(crate) palette: [u8; 32],
+    pub palette: [u8; 32],
 
     /// Visuals of the cartridge
-    pub(crate) chr: Vec<u8>,
+    pub chr: Vec<u8>,
 
     /// Internal memory storing sprites
     /// max. 64 sprites (4 bytes each) = 256 bytes
     /// https://www.nesdev.org/wiki/PPU_OAM
-    pub(crate) oam: [u8; 256],
+    pub oam: [u8; 256],
     oam_address: u8,
 
     /// Mirroring mode
@@ -106,7 +106,7 @@ impl PPU {
             if self.scanline == 241 {
                 // set the vblank flag
                 self.status_register.add(PPUStatus::Vblank.as_u8());
-                self.status_register.add(PPUStatus::Sprite0Hit.as_u8());
+                self.status_register.remove(PPUStatus::Sprite0Hit.as_u8());
 
                 // trigger NMI
                 if self.controller_register.vblank() {
@@ -116,9 +116,9 @@ impl PPU {
 
             if self.scanline >= 262 {
                 self.scanline = 0;
-                self.status_register.remove(PPUStatus::Vblank.as_u8());
-                self.status_register.remove(PPUStatus::Sprite0Hit.as_u8());
                 self.nmi = false;
+                self.status_register.remove(PPUStatus::Sprite0Hit.as_u8());
+                self.status_register.remove(PPUStatus::Vblank.as_u8());
                 return true;
             }
         }
@@ -187,14 +187,17 @@ impl PPU {
             },
             0x3000 ..= 0x3EFF => {
                 // unused
-                panic!("Reading from 0x3000 - 0x3EFF is not expected");
+                // panic!("Reading from 0x3000 - 0x3EFF is not expected");
+                0
             },
             0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
                 // mirror of 0x3F00 - 0x3F0F
+                println!("Reading from palette at address {:04X}", addr);
                 self.palette[(addr - 0x3F00 - 0x10) as usize]
             },
             0x3F00 ..= 0x3FFF => {
                 // palette
+                println!("Reading from palette at address {:04X}", addr);
                 self.palette[(addr - 0x3F00) as usize]
             },
             _ => {
@@ -219,7 +222,7 @@ impl PPU {
             },
             0x3000 ..= 0x3EFF => {
                 // unused
-                panic!("Writing to 0x3000 - 0x3EFF is not expected");
+                //panic!("Writing to 0x3000 - 0x3EFF is not expected");
             },
             0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
                 // mirror of 0x3F00 - 0x3F0F
