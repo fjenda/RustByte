@@ -45,16 +45,9 @@ impl Renderer {
             let tile_x = ppu.oam[i + 3] as usize;
             let tile_y = ppu.oam[i] as usize;
 
-            let flip_vertical = if ppu.oam[i + 2] >> 7 & 1 == 1 {
-                true
-            } else {
-                false
-            };
-            let flip_horizontal = if ppu.oam[i + 2] >> 6 & 1 == 1 {
-                true
-            } else {
-                false
-            };
+            let flip_vertical = ppu.oam[i + 2] >> 7 & 1 == 1;
+            let flip_horizontal = ppu.oam[i + 2] >> 6 & 1 == 1;
+            
             let pallette_idx = ppu.oam[i + 2] & 0b11;
             let sprite_palette = Self::sprite_pal(ppu, pallette_idx);
             let bank: u16 = ppu.controller_register.sprite_pattern_table();
@@ -67,8 +60,8 @@ impl Renderer {
                 let mut lower = tile[y + 8];
                 'ololo: for x in (0..=7).rev() {
                     let value = (1 & lower) << 1 | (1 & upper);
-                    upper = upper >> 1;
-                    lower = lower >> 1;
+                    upper >>= 1;
+                    lower >>= 1;
                     let rgb = match value {
                         0 => continue 'ololo, // skip coloring the pixel
                         1 => PALETTE[sprite_palette[1] as usize],

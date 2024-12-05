@@ -1,7 +1,6 @@
-use std::collections::HashMap;
+use crate::cpu::addressing::Addressing;
 use crate::cpu::cpu::CPU;
 use crate::cpu::instructions::{Instruction, INSTRUCTION_MAP};
-use crate::cpu::addressing::Addressing;
 use crate::ppu::cartridge::Cartridge;
 
 pub fn trace(cpu: &mut CPU) -> String {
@@ -22,7 +21,7 @@ pub fn trace(cpu: &mut CPU) -> String {
 
     let tmp = match ops.bytes {
         1 => match ops.address {
-            0x0a | 0x4a | 0x2a | 0x6a => format!("A "),
+            0x0a | 0x4a | 0x2a | 0x6a => "A ".to_string(),
             _ => String::from(""),
         },
         2 => {
@@ -44,14 +43,14 @@ pub fn trace(cpu: &mut CPU) -> String {
                 Addressing::IndirectX => format!(
                     "(${:02x},X) @ {:02x} = {:04x} = {:02x}",
                     address,
-                    (address.wrapping_add(cpu.x.value())),
+                    address.wrapping_add(cpu.x.value()),
                     mem_addr,
                     stored_value
                 ),
                 Addressing::IndirectY => format!(
                     "(${:02x}),Y = {:04x} @ {:04x} = {:02x}",
                     address,
-                    (mem_addr.wrapping_sub(cpu.y.value() as u16)),
+                    mem_addr.wrapping_sub(cpu.y.value() as u16),
                     mem_addr,
                     stored_value
                 ),
@@ -159,7 +158,7 @@ pub fn test_rom() -> Cartridge {
         ],
         trainer: None,
         pgp_rom: vec![1; 2 * 16384],
-        chr_rom: vec![2; 1 * 8192],
+        chr_rom: vec![2; 8192],
     });
 
     Cartridge::new(test_rom).unwrap()

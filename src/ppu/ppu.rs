@@ -1,9 +1,9 @@
 use crate::byte_status::ByteStatus;
 use crate::flags::PPUStatus;
-use crate::ppu::mirroring::Mirroring;
 use crate::ppu::address_register::AddressRegister;
 use crate::ppu::controller_register::ControllerRegister;
 use crate::ppu::mask_register::MaskRegister;
+use crate::ppu::mirroring::Mirroring;
 use crate::ppu::scroll_register::ScrollRegister;
 use crate::ppu::status_register::StatusRegister;
 

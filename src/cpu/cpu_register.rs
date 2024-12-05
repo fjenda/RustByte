@@ -5,6 +5,12 @@ pub struct CPURegister {
     value: u8
 }
 
+impl Default for CPURegister {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CPURegister {
     /// Creates new instance of the object
     pub fn new() -> Self {

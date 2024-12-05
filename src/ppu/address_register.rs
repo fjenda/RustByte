@@ -3,12 +3,18 @@
 /// Class representing a PPU Address Register $2006
 #[derive(Debug)]
 pub struct AddressRegister {
-    /// 2-byte regiter (u8, u8)
+    /// 2-byte register (u8, u8)
     /// order: high byte, low byte
     value: (u8, u8),
 
     /// Flag for high byte
     high_byte: bool,
+}
+
+impl Default for AddressRegister {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AddressRegister {

@@ -1,5 +1,3 @@
-use rust_byte::cpu::cpu::CPU;
-
 #[cfg(test)]
 mod test {
     use super::*;

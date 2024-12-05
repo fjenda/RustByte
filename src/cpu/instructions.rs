@@ -1,9 +1,9 @@
 // https://www.nesdev.org/obelisk-6502-guide/reference.html
 
-use std::collections::HashMap;
-use std::fmt::{format, Display, Formatter};
-use lazy_static::lazy_static;
 use crate::cpu::addressing::Addressing;
+use lazy_static::lazy_static;
+use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 
 // Kindly borrowed and modified from https://github.com/bugzmanov/nes_ebook/blob/master/code/ch8/src/opcodes.rs
 // I can't be bothered to write all this out

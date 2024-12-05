@@ -1,12 +1,18 @@
 // https://www.nesdev.org/wiki/PPU_registers#PPUCTRL_-_Miscellaneous_settings_($2000_write)
 
 use crate::byte_status::ByteStatus;
-use crate::flags::{Settings};
+use crate::flags::Settings;
 
 /// Class representing a PPU Controller Register $2000
 #[derive(Debug)]
 pub struct ControllerRegister {
     pub value: u8,
+}
+
+impl Default for ControllerRegister {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ControllerRegister {

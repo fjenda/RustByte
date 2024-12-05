@@ -1,16 +1,13 @@
 // https://www.nesdev.org/obelisk-6502-guide/reference.html
 
-use std::fmt::Formatter;
-use sdl2::log::log;
-use crate::cpu::addressing::Addressing;
-use crate::flags::Status;
 use crate::byte_status::ByteStatus;
+use crate::cpu::addressing::Addressing;
 use crate::cpu::bus::Bus;
 use crate::cpu::cpu_register::CPURegister;
-use crate::cpu::cpu_status::{CPUStatus};
-use crate::cpu::instructions::{Instruction, INSTRUCTION_MAP, OpName::*};
-use crate::cpu::cpu_stack::CPUStack;
+use crate::cpu::cpu_status::CPUStatus;
+use crate::cpu::instructions::{Instruction, OpName::*, INSTRUCTION_MAP};
 use crate::cpu::interrupt::{Interrupt, NMI};
+use crate::flags::Status;
 
 /// This class represents the CPU
 pub struct CPU<'a> {
@@ -38,12 +35,12 @@ pub struct CPU<'a> {
 
 impl<'a> CPU<'a> {
     /// Creates an instance of CPU
-    pub fn new<'b>(bus: Bus<'b>) -> CPU<'b> {
+    pub fn new(bus: Bus) -> CPU {
         CPU {
-            a: CPURegister::new(),
-            x: CPURegister::new(),
-            y: CPURegister::new(),
-            status: CPUStatus::new(),
+            a: CPURegister::default(),
+            x: CPURegister::default(),
+            y: CPURegister::default(),
+            status: CPUStatus::default(),
             prog_counter: 0,
             // memory: Memory::new(),
             bus,
@@ -95,8 +92,7 @@ impl<'a> CPU<'a> {
         // set the break flags
         status.set(Status::Break.as_u8(), interrupt.flag_mask & 0b010000 == 1);
         status.set(Status::Break2.as_u8(), interrupt.flag_mask & 0b100000 == 1);
-
-
+        
         // push the status register to the stack
         self.stack_push(status.value);
         self.status.add(Status::InterruptDisable.as_u8());
@@ -223,7 +219,7 @@ impl<'a> CPU<'a> {
     fn get_param_address_internal(&mut self, mode: &Addressing) -> (u16, bool) {
         match mode {
             Addressing::Immediate => (self.prog_counter, false),
-            _ => self.get_param_address(&mode, self.prog_counter),
+            _ => self.get_param_address(mode, self.prog_counter),
         }
     }
 
@@ -570,9 +566,9 @@ impl<'a> CPU<'a> {
         }
 
         // shift left
-        param = param << 1;
+        param <<= 1;
         if old_carry {
-            param = param | 1;
+            param |= 1;
         }
 
         self.a.set(param);
@@ -591,9 +587,9 @@ impl<'a> CPU<'a> {
         }
 
         // shift left
-        param = param << 1;
+        param <<= 1;
         if old_carry {
-            param = param | 1;
+            param |= 1;
         }
 
         self.write(address, param);
@@ -612,9 +608,9 @@ impl<'a> CPU<'a> {
         }
 
         // shift right
-        param = param >> 1;
+        param >>= 1;
         if old_carry {
-            param = param | 0x80;
+            param |= 0x80;
         }
 
         self.a.set(param);
@@ -633,9 +629,9 @@ impl<'a> CPU<'a> {
         }
 
         // shift right
-        param = param >> 1;
+        param >>= 1;
         if old_carry {
-            param = param | 0x80;
+            param |= 0x80;
         }
 
         self.write(address, param);

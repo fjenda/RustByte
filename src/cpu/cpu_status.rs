@@ -1,12 +1,18 @@
 // https://www.nesdev.org/wiki/Status_flags
 
-use std::fmt::{Display, Formatter};
 use crate::byte_status::ByteStatus;
+use std::fmt::{Display, Formatter};
 
 /// Class representing a CPU Status
 #[derive(Debug, Clone)]
 pub struct CPUStatus {
     pub value: u8,
+}
+
+impl Default for CPUStatus {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CPUStatus {

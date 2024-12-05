@@ -1,39 +1,15 @@
 extern crate sdl2;
 
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
-use sdl2::pixels::PixelFormatEnum;
-use sdl2::EventPump;
 use rust_byte::cpu::bus::Bus;
 use rust_byte::cpu::cpu::CPU;
-use rust_byte::render::color_palette::PALETTE;
-use rust_byte::render::frame::Frame;
 use rust_byte::ppu::cartridge::Cartridge;
 use rust_byte::ppu::ppu::PPU;
+use rust_byte::render::color_palette::PALETTE;
+use rust_byte::render::frame::Frame;
 use rust_byte::render::renderer::Renderer;
-use rust_byte::trace::trace;
-//
-//     // run the game cycle
-//     let bus = Bus::new(rom, move |ppu: &PPU| {
-//         Renderer::render(ppu, &mut frame);
-//         texture.update(None, &frame.data, 256 * 3).unwrap();
-//
-//         canvas.copy(&texture, None, None).unwrap();
-//
-//         canvas.present();
-//         for event in event_pump.poll_iter() {
-//             match event {
-//                 Event::Quit { .. }
-//                 | Event::KeyDown {
-//                     keycode: Some(Keycode::Escape),
-//                     ..
-//                 } => std::process::exit(0),
-//                 _ => { /* do nothing */ }
-//             }
-//         }
-//     });
-// }
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::pixels::PixelFormatEnum;
 
 fn show_tile_bank(chr_rom: &Vec<u8>, bank: usize) ->Frame {
     assert!(bank <= 1);
@@ -41,7 +17,7 @@ fn show_tile_bank(chr_rom: &Vec<u8>, bank: usize) ->Frame {
     let mut frame = Frame::new();
     let mut tile_y = 0;
     let mut tile_x = 0;
-    let bank = (bank * 0x1000) as usize;
+    let bank = bank * 0x1000;
 
     for tile_n in 0..255 {
         if tile_n != 0 && tile_n % 20 == 0 {
@@ -96,7 +72,7 @@ fn main() {
         .unwrap();
 
     // load the game
-    let bytes: Vec<u8> = std::fs::read("assets/nestest.nes").unwrap();
+    let bytes: Vec<u8> = std::fs::read("assets/pacman.nes").unwrap();
     let rom = Cartridge::new(bytes).unwrap();
 
     let mut frame = Frame::new();

@@ -142,7 +142,7 @@ impl<'a> Bus<'a> {
         // u16::from_le_bytes([low, high])
         let lo = self.read(addr) as u16;
         let hi = self.read(addr + 1) as u16;
-        (hi << 8) | (lo as u16)
+        (hi << 8) | lo
     }
 
     /// Function that writes a value into the memory at a given address

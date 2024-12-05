@@ -1,8 +1,8 @@
 use rust_byte::ppu::ppu::PPU;
 #[cfg(test)]
 pub mod test {
-    use rust_byte::ppu::mirroring::Mirroring;
     use super::*;
+    use rust_byte::ppu::mirroring::Mirroring;
 
     #[test]
     fn verify_vram_write_behavior() {
