@@ -12,7 +12,7 @@ pub struct StatusRegister {
 impl StatusRegister {
     pub fn new() -> Self {
         StatusRegister {
-            value: 0,
+            value: 0b0000_0000,
         }
     }
 }

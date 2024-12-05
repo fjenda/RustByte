@@ -71,6 +71,7 @@ fn show_tile_bank(chr_rom: &Vec<u8>, bank: usize) ->Frame {
 
         tile_x += 10;
     }
+
     frame
 }
 
@@ -95,15 +96,14 @@ fn main() {
         .unwrap();
 
     // load the game
-    let bytes: Vec<u8> = std::fs::read("assets/Alter_Ego.nes").unwrap();
+    let bytes: Vec<u8> = std::fs::read("assets/pacman.nes").unwrap();
     let rom = Cartridge::new(bytes).unwrap();
 
     let mut frame = Frame::new();
 
-    // let bus = Bus::new(rom);
+    // let bus = Bus::new(rom, |_| {});
     // let mut cpu = CPU::new(bus);
     // cpu.reset();
-    // cpu.prog_counter = 0xC000;
     // cpu.interpret_callback(|cpu| {
     //     // println!("{}", trace(cpu));
     // });

@@ -66,15 +66,8 @@ impl<'a> Bus<'a> {
         // update cycles
         self.cycles += cycles as usize;
 
-        let nmi_before = self.ppu.nmi;
-
-        // PPU ticks 3 times faster than the CPU
-        self.ppu.tick(cycles * 3);
-
-        let nmi_after = self.ppu.nmi;
-
-        if !nmi_before && nmi_after {
-            // call the game callback
+        let new_frame = self.ppu.tick(cycles * 3);
+        if new_frame {
             (self.game)(&self.ppu);
         }
     }
@@ -87,6 +80,9 @@ impl<'a> Bus<'a> {
     /// Function that returns a value read from the memory at a given address
     /// This function will handle the different memory regions
     pub fn read(&mut self, addr: u16) -> u8 {
+
+        // println!("Read from address: {:#06X}", addr);
+
         match addr {
             0x0000 ..= 0x1FFF => {
                 // ram
@@ -152,6 +148,9 @@ impl<'a> Bus<'a> {
     /// Function that writes a value into the memory at a given address
     /// This function will handle the different memory regions
     pub fn write(&mut self, addr: u16, val: u8) {
+
+        // println!("Write to address: {:#06X}, value: {:#04X}", addr, val);
+
         match addr {
             0x0000 ..= 0x1FFF => {
                 // ram
@@ -236,7 +235,7 @@ impl<'a> Bus<'a> {
     /// Function that reads from the ROM
     fn read_from_rom(&mut self, addr: u16) -> u8 {
         // adjust address by subtracting the base address
-        let mut adjusted_addr = addr.wrapping_sub(0x8000);
+        let mut adjusted_addr = addr - 0x8000;
 
         // check if we need to handle mirroring
         if self.prg.len() == 0x4000 && adjusted_addr >= 0x4000 {

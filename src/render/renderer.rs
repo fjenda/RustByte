@@ -17,15 +17,15 @@ impl Renderer {
             let tile = ppu.ram[i] as u16;
             let tile_column = i % 32;
             let tile_row = i / 32;
-            let tile = &ppu.chr[(background + tile * 16) as usize ..= (background + tile * 16 + 15) as usize];
-            let palette = Renderer::bg_pal(ppu, tile_column, tile_row);
+            let tile = &ppu.chr[(background + tile * 16) as usize..=(background + tile * 16 + 15) as usize];
+            let palette = Self::bg_pal(ppu, tile_column, tile_row);
 
-            for y in 0 ..= 7 {
+            for y in 0..=7 {
                 let mut upper = tile[y];
                 let mut lower = tile[y + 8];
 
-                for x in (0 ..= 7).rev() {
-                    let value = (1 & upper) << 1 | (1 & lower);
+                for x in (0..=7).rev() {
+                    let value = (1 & lower) << 1 | (1 & upper);
                     upper = upper >> 1;
                     lower = lower >> 1;
                     let rgb = match value {
@@ -33,10 +33,6 @@ impl Renderer {
                         1 => PALETTE[palette[1] as usize],
                         2 => PALETTE[palette[2] as usize],
                         3 => PALETTE[palette[3] as usize],
-                        // 0 => PALETTE[0x01],
-                        // 1 => PALETTE[0x23],
-                        // 2 => PALETTE[0x27],
-                        // 3 => PALETTE[0x30],
                         _ => panic!("can't be"),
                     };
                     frame.set_pixel(tile_column * 8 + x, tile_row * 8 + y, rgb)
@@ -44,7 +40,7 @@ impl Renderer {
             }
         }
 
-        for i in (0 .. ppu.oam.len()).step_by(4).rev() {
+        for i in (0..ppu.oam.len()).step_by(4).rev() {
             let tile_idx = ppu.oam[i + 1] as u16;
             let tile_x = ppu.oam[i + 3] as usize;
             let tile_y = ppu.oam[i] as usize;
@@ -60,7 +56,7 @@ impl Renderer {
                 false
             };
             let pallette_idx = ppu.oam[i + 2] & 0b11;
-            let sprite_palette = Renderer::sprite_pal(ppu, pallette_idx);
+            let sprite_palette = Self::sprite_pal(ppu, pallette_idx);
             let bank: u16 = ppu.controller_register.sprite_pattern_table();
 
             let tile = &ppu.chr[(bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize];

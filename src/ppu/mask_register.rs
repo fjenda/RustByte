@@ -10,7 +10,7 @@ pub struct MaskRegister {
 impl MaskRegister {
     pub fn new() -> Self {
         MaskRegister {
-            value: 0,
+            value: 0b0000_0000,
         }
     }
 }

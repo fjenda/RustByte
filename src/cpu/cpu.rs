@@ -75,11 +75,11 @@ impl<'a> CPU<'a> {
         self.x.reset();
         self.y.reset();
 
-        // reset the status
-        self.status.reset();
-
         // reset the stack
         self.stack_pointer = 0xFD;
+
+        // reset the status
+        self.status.reset();
 
         // set prog_counter to address at 0xFFFC
         self.prog_counter = self.read_u16(0xFFFC);
@@ -759,7 +759,7 @@ impl<'a> CPU<'a> {
                 BPL => self.branch(!self.status.is_set(Status::Negative.as_u8())),
                 BVS => self.branch(self.status.is_set(Status::Overflow.as_u8())),
                 BVC => self.branch(!self.status.is_set(Status::Overflow.as_u8())),
-                BRK => return,
+                BRK => { },
                 CLC => self.clear_status(Status::Carry),
                 CLD => self.clear_status(Status::Decimal),
                 CLI => self.clear_status(Status::InterruptDisable),

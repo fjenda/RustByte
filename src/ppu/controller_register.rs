@@ -13,24 +13,24 @@ impl ControllerRegister {
     /// Function that creates a new Controller Register
     pub fn new() -> Self {
         ControllerRegister {
-            value: 0b0010_0000,
+            value: 0b0000_0000,
         }
     }
 
     /// Increment value of VRAM address after accessing memory
     pub fn vram_increment(&self) -> u8 {
-        if self.is_set(Settings::VRAM.as_u8()) {
-            32
-        } else {
+        if !self.is_set(Settings::VRAM.as_u8()) {
             1
+        } else {
+            32
         }
     }
 
     pub fn sprite_pattern_table(&self) -> u16 {
-        if self.is_set(Settings::Sprite.as_u8()) {
-            0x1000
-        } else {
+        if !self.is_set(Settings::Sprite.as_u8()) {
             0
+        } else {
+            0x1000
         }
     }
 
@@ -43,10 +43,10 @@ impl ControllerRegister {
     }
 
     pub fn sprite_size(&self) -> u8 {
-        if self.is_set(Settings::SpriteSize.as_u8()) {
-            16
-        } else {
+        if !self.is_set(Settings::SpriteSize.as_u8()) {
             8
+        } else {
+            16
         }
     }
 
@@ -64,8 +64,12 @@ impl ControllerRegister {
         self.is_set(Settings::Vblank.as_u8())
     }
 
-    pub fn master_slave(&self) -> bool {
-        self.is_set(Settings::MasterSlave.as_u8())
+    pub fn master_slave(&self) -> u8 {
+        if !self.is_set(Settings::Vblank.as_u8()) {
+            0
+        } else {
+            1
+        }
     }
 }
 

@@ -60,7 +60,7 @@ impl AddressRegister {
         let lo = self.value.1;
 
         // wrapping add the value
-        self.value.1 = lo.wrapping_add(val);
+        self.value.1 = self.value.1.wrapping_add(val);
 
         // check if the high byte needs to be incremented
         if self.value.1 < lo {
