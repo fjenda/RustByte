@@ -4,3 +4,4 @@
 pub mod color_palette;
 pub mod frame;
 pub mod renderer;
+pub mod input;

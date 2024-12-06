@@ -1,56 +1,17 @@
 extern crate sdl2;
 
+use std::collections::HashMap;
 use rust_byte::cpu::bus::Bus;
 use rust_byte::cpu::cpu::CPU;
 use rust_byte::ppu::cartridge::Cartridge;
 use rust_byte::ppu::ppu::PPU;
-use rust_byte::render::color_palette::PALETTE;
 use rust_byte::render::frame::Frame;
 use rust_byte::render::renderer::Renderer;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;
-
-fn show_tile_bank(chr_rom: &Vec<u8>, bank: usize) ->Frame {
-    assert!(bank <= 1);
-
-    let mut frame = Frame::new();
-    let mut tile_y = 0;
-    let mut tile_x = 0;
-    let bank = bank * 0x1000;
-
-    for tile_n in 0..255 {
-        if tile_n != 0 && tile_n % 20 == 0 {
-            tile_y += 10;
-            tile_x = 0;
-        }
-        let tile = &chr_rom[(bank + tile_n * 16)..=(bank + tile_n * 16 + 15)];
-
-        for y in 0..=7 {
-            let mut upper = tile[y];
-            let mut lower = tile[y + 8];
-
-            for x in (0..=7).rev() {
-                let value = (1 & upper) << 1 | (1 & lower);
-                upper = upper >> 1;
-                lower = lower >> 1;
-                let rgb = match value {
-                    0 => PALETTE[0x01],
-                    1 => PALETTE[0x23],
-                    2 => PALETTE[0x27],
-                    3 => PALETTE[0x30],
-                    _ => panic!("can't be"),
-                };
-                frame.set_pixel(tile_x + x, tile_y + y, rgb)
-            }
-        }
-
-        tile_x += 10;
-    }
-
-    frame
-}
-
+use rust_byte::flags::Button;
+use rust_byte::render::input::joypad::Joypad;
 
 fn main() {
     // init sdl2
@@ -76,8 +37,19 @@ fn main() {
     let rom = Cartridge::new(bytes).unwrap();
 
     let mut frame = Frame::new();
+    
+    // map keyboard to joypad
+    let mut keys = HashMap::new();
+    keys.insert(Keycode::S, Button::DOWN);
+    keys.insert(Keycode::W, Button::UP);
+    keys.insert(Keycode::D, Button::RIGHT);
+    keys.insert(Keycode::A, Button::LEFT);
+    keys.insert(Keycode::Space, Button::SELECT);
+    keys.insert(Keycode::LCtrl, Button::START);
+    keys.insert(Keycode::Q, Button::A);
+    keys.insert(Keycode::E, Button::B);
 
-    let bus = Bus::new(rom, move |ppu: &PPU| {
+    let bus = Bus::new(rom, move |ppu: &PPU, joy: &mut Joypad| {
         Renderer::render(ppu, &mut frame);
         texture.update(None, &frame.data, 256 * 3).unwrap();
 
@@ -90,6 +62,19 @@ fn main() {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => std::process::exit(0),
+                
+                Event::KeyDown { keycode, .. } => {
+                    if let Some(key) = keys.get(&keycode.unwrap_or(Keycode::Ampersand)) {
+                        joy.add(*key);
+                    }
+                },
+                
+                Event::KeyUp { keycode, .. } => {
+                    if let Some(key) = keys.get(&keycode.unwrap_or(Keycode::Ampersand)) {
+                        joy.remove(*key);
+                    }
+                },
+                
                 _ => { }
             }
         }

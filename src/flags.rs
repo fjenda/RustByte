@@ -79,3 +79,23 @@ impl PPUStatus {
         self as u8
     }
 }
+
+/// Enum representing the buttons on the joypad controller
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub enum Button {
+    RIGHT   = 0b1000_0000,
+    LEFT    = 0b0100_0000,
+    DOWN    = 0b0010_0000,
+    UP      = 0b0001_0000,
+    START   = 0b0000_1000,
+    SELECT  = 0b0000_0100,
+    B       = 0b0000_0010,
+    A       = 0b0000_0001,
+}
+
+impl Button {
+    pub fn as_u8(self) -> u8 {
+        self as u8
+    }
+}

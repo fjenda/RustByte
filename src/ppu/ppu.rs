@@ -1,5 +1,5 @@
 use crate::byte_status::ByteStatus;
-use crate::flags::PPUStatus;
+use crate::flags::{Mask, PPUStatus};
 use crate::ppu::address_register::AddressRegister;
 use crate::ppu::controller_register::ControllerRegister;
 use crate::ppu::mask_register::MaskRegister;
@@ -100,7 +100,11 @@ impl PPU {
         self.cycles += cycles as usize;
 
         if self.cycles >= 341 {
-            self.cycles = self.cycles - 341;
+            if self.sprite_zero_hit(self.cycles) {
+                self.status_register.add(PPUStatus::Sprite0Hit.as_u8());
+            }
+            
+            self.cycles -= 341;
             self.scanline += 1;
 
             if self.scanline == 241 {
@@ -124,6 +128,12 @@ impl PPU {
         }
 
         false
+    }
+
+    fn sprite_zero_hit(&self, cycle: usize) -> bool {
+        let y = self.oam[0] as usize;
+        let x = self.oam[3] as usize;
+        (y == self.scanline as usize) && x <= cycle && self.mask_register.is_set(Mask::Sprite.as_u8())
     }
 
     /// Handle mirroring of the PPU
@@ -192,12 +202,10 @@ impl PPU {
             },
             0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
                 // mirror of 0x3F00 - 0x3F0F
-                println!("Reading from palette at address {:04X}", addr);
                 self.palette[(addr - 0x3F00 - 0x10) as usize]
             },
             0x3F00 ..= 0x3FFF => {
                 // palette
-                println!("Reading from palette at address {:04X}", addr);
                 self.palette[(addr - 0x3F00) as usize]
             },
             _ => {

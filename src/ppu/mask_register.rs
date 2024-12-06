@@ -1,10 +1,17 @@
 // https://www.nesdev.org/wiki/PPU_registers#PPUMASK_-_Rendering_settings_($2001_write)
 
 use crate::byte_status::ByteStatus;
+use crate::flags::Mask;
 
 #[derive(Debug)]
 pub struct MaskRegister {
     pub value: u8,
+}
+
+pub enum Color {
+    Red,
+    Green,
+    Blue,
 }
 
 impl MaskRegister {
@@ -12,6 +19,23 @@ impl MaskRegister {
         MaskRegister {
             value: 0b0000_0000,
         }
+    }
+    
+    pub fn color_emphasis(&self) -> Vec<Color> {
+        let mut result = Vec::<Color>::new();
+        if self.is_set(Mask::Red.as_u8()) {
+            result.push(Color::Red);
+        }
+        
+        if self.is_set(Mask::Green.as_u8()) {
+            result.push(Color::Green);
+        }
+        
+        if self.is_set(Mask::Blue.as_u8()) {
+            result.push(Color::Blue);
+        }
+        
+        result
     }
 }
 

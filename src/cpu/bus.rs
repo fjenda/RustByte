@@ -10,6 +10,7 @@
 
 use crate::ppu::cartridge::Cartridge;
 use crate::ppu::ppu::PPU;
+use crate::render::input::joypad::Joypad;
 
 pub struct Bus<'callback> {
     /// 2kB of RAM
@@ -25,7 +26,10 @@ pub struct Bus<'callback> {
     pub cycles: usize,
 
     /// Game callback
-    game: Box<dyn FnMut(&PPU) + 'callback>
+    game: Box<dyn FnMut(&PPU, &mut Joypad) + 'callback>,
+    
+    /// Joypad 1
+    joypad1: Joypad,
 }
 
 /// Implementation of the Bus.
@@ -36,7 +40,7 @@ impl<'a> Bus<'a> {
     /// Create a new Bus
     pub fn new<'callback, F>(cartridge: Cartridge, callback: F) -> Bus<'callback>
     where
-        F: FnMut(&PPU) + 'callback,
+        F: FnMut(&PPU, &mut Joypad) + 'callback,
     {
         let ppu = PPU::new(cartridge.chr_rom, cartridge.mirroring);
 
@@ -46,6 +50,7 @@ impl<'a> Bus<'a> {
             ppu,
             cycles: 0,
             game: Box::from(callback),
+            joypad1: Joypad::default(),
         }
     }
     //
@@ -68,7 +73,7 @@ impl<'a> Bus<'a> {
 
         let new_frame = self.ppu.tick(cycles * 3);
         if new_frame {
-            (self.game)(&self.ppu);
+            (self.game)(&self.ppu, &mut self.joypad1);
         }
     }
 
@@ -112,7 +117,7 @@ impl<'a> Bus<'a> {
             },
             0x4016 => {
                 // JOYPAD1
-                0
+                self.joypad1.read()
             },
             0x4017 => {
                 // JOYPAD2
@@ -190,6 +195,7 @@ impl<'a> Bus<'a> {
             },
             0x4016 => {
                 // JOYPAD1
+                self.joypad1.write(val);
             },
             0x4017 => {
                 // JOYPAD2

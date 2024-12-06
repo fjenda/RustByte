@@ -169,10 +169,11 @@ mod test {
     use super::*;
     use crate::cpu::bus::Bus;
     use crate::ppu::ppu::PPU;
+    use crate::render::input::joypad::Joypad;
 
     #[test]
     fn test_format_trace() {
-        let mut bus = Bus::new(test_rom(), |ppu: &PPU| {});
+        let mut bus = Bus::new(test_rom(), |ppu: &PPU, joy: &mut Joypad| {});
         bus.write(100, 0xa2);
         bus.write(101, 0x01);
         bus.write(102, 0xca);
@@ -205,7 +206,7 @@ mod test {
 
     #[test]
     fn test_format_mem_access() {
-        let mut bus = Bus::new(test_rom(), |ppu: &PPU| {});
+        let mut bus = Bus::new(test_rom(), |ppu: &PPU, joy: &mut Joypad| {});
         // ORA ($33), Y
         bus.write(100, 0x11);
         bus.write(101, 0x33);
