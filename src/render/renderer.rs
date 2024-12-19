@@ -85,7 +85,7 @@ impl Renderer {
             (1,0) => (attr_byte >> 2) & 0b11,
             (0,1) => (attr_byte >> 4) & 0b11,
             (1,1) => (attr_byte >> 6) & 0b11,
-            (_,_) => panic!("should not happen"),
+            (_,_) => panic!("wrong palette index"),
         };
 
         let palette_start: usize = 1 + (palette_idx as usize) * 4;
