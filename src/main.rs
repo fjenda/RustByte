@@ -35,7 +35,6 @@ fn main() {
     // load the game
     let bytes: Vec<u8> = std::fs::read("assets/pacman.nes").unwrap();
     let rom = Cartridge::new(bytes).unwrap();
-
     let mut frame = Frame::new();
     
     // map keyboard to joypad
@@ -82,5 +81,5 @@ fn main() {
 
     let mut cpu = CPU::new(bus);
     cpu.reset();
-    cpu.interpret();
+    cpu.interpret_callback(|cpu| {});
 }

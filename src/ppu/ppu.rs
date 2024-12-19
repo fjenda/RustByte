@@ -31,7 +31,7 @@ pub struct PPU {
 
     /// Mirroring mode
     /// https://www.nesdev.org/wiki/Mirroring
-    mirroring: Mirroring,
+    pub(crate) mirroring: Mirroring,
 
     /// PPUCTRL - Controller Register ($2000)
     pub controller_register: ControllerRegister,
@@ -43,7 +43,7 @@ pub struct PPU {
     pub status_register: StatusRegister,
 
     /// PPUSCROLL - Scroll Register ($2005)
-    scroll_register: ScrollRegister,
+    pub scroll_register: ScrollRegister,
 
     /// PPUADDR - Address Register ($2006)
     pub address_register: AddressRegister,
@@ -58,7 +58,7 @@ pub struct PPU {
     scanline: u16,
 
     /// NMI Interrupt
-    nmi: bool,
+    pub nmi: bool,
 }
 
 impl PPU {
@@ -222,7 +222,8 @@ impl PPU {
         match addr {
             0x0000 ..= 0x1FFF => {
                 // pattern tables
-                panic!("Writing to 0x0000 - 0x1FFF (CHR) is not expected");
+                // panic!("Writing to 0x0000 - 0x1FFF (CHR) is not expected");
+                
             },
             0x2000 ..= 0x2FFF => {
                 // name tables
@@ -230,7 +231,7 @@ impl PPU {
             },
             0x3000 ..= 0x3EFF => {
                 // unused
-                //panic!("Writing to 0x3000 - 0x3EFF is not expected");
+                // panic!("Writing to 0x3000 - 0x3EFF is not expected");
             },
             0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
                 // mirror of 0x3F00 - 0x3F0F

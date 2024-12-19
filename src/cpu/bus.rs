@@ -53,26 +53,17 @@ impl<'a> Bus<'a> {
             joypad1: Joypad::default(),
         }
     }
-    //
-    // pub fn new<'callback>(cartridge: Cartridge) -> Bus<'callback> {
-    //     let ppu = PPU::new(cartridge.chr_rom, cartridge.mirroring);
-    //
-    //     Bus {
-    //         ram: [0; 2048],
-    //         prg: cartridge.prg_rom,
-    //         ppu,
-    //         cycles: 0,
-    //         game: Box::from(|_ppu: &PPU| {}),
-    //     }
-    // }
 
     /// Function that ticks the bus, updating the number of cycles and the PPU
     pub fn tick(&mut self, cycles: u8) {
         // update cycles
         self.cycles += cycles as usize;
-
-        let new_frame = self.ppu.tick(cycles * 3);
-        if new_frame {
+        
+        let nmi_before = self.ppu.nmi;
+        self.ppu.tick(cycles * 3);
+        let nmi_after = self.ppu.nmi;
+        
+        if !nmi_before && nmi_after {
             (self.game)(&self.ppu, &mut self.joypad1);
         }
     }
